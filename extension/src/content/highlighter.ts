@@ -1,5 +1,5 @@
 import type { PIIMatch, PIIType } from '../types.ts'
-import { getFakeReplacement } from '../tokens/manager.ts'
+import { getTokenForMatch } from '../tokens/manager.ts'
 
 let replaceCallback: (() => void) | null = null
 
@@ -8,32 +8,32 @@ export function setReplaceCallback(fn: () => void) {
 }
 
 const TYPE_COLORS: Record<PIIType, string> = {
-  NAME: '#3b82f6',
-  EMAIL: '#f59e0b',
-  PHONE: '#8b5cf6',
-  FINANCIAL: '#ef4444',
-  SSN: '#ef4444',
-  ID: '#ec4899',
-  ADDRESS: '#06b6d4',
-  SECRET: '#dc2626',
-  URL: '#6366f1',
-  DATE: '#14b8a6',
-  CUSTOM: '#f97316',
+  NAME: '#5e81ac',
+  EMAIL: '#ebcb8b',
+  PHONE: '#b48ead',
+  FINANCIAL: '#bf616a',
+  SSN: '#bf616a',
+  ID: '#d08770',
+  ADDRESS: '#8fbcbb',
+  SECRET: '#bf616a',
+  URL: '#81a1c1',
+  DATE: '#a3be8c',
+  CUSTOM: '#d08770',
   PATH: '#10b981',
 }
 
 const TYPE_BG: Record<PIIType, string> = {
-  NAME: 'rgba(59,130,246,0.12)',
-  EMAIL: 'rgba(245,158,11,0.12)',
-  PHONE: 'rgba(139,92,246,0.12)',
-  FINANCIAL: 'rgba(239,68,68,0.15)',
-  SSN: 'rgba(239,68,68,0.15)',
-  ID: 'rgba(236,72,153,0.12)',
-  ADDRESS: 'rgba(6,182,212,0.12)',
-  SECRET: 'rgba(220,38,38,0.15)',
-  URL: 'rgba(99,102,241,0.12)',
-  DATE: 'rgba(20,184,166,0.12)',
-  CUSTOM: 'rgba(249,115,22,0.12)',
+  NAME: 'rgba(94,129,172,0.14)',
+  EMAIL: 'rgba(235,203,139,0.14)',
+  PHONE: 'rgba(180,142,173,0.14)',
+  FINANCIAL: 'rgba(191,97,106,0.16)',
+  SSN: 'rgba(191,97,106,0.16)',
+  ID: 'rgba(208,135,112,0.14)',
+  ADDRESS: 'rgba(143,188,187,0.14)',
+  SECRET: 'rgba(191,97,106,0.18)',
+  URL: 'rgba(129,161,193,0.14)',
+  DATE: 'rgba(163,190,140,0.14)',
+  CUSTOM: 'rgba(208,135,112,0.14)',
   PATH: 'rgba(16,185,129,0.12)',
 }
 
@@ -49,6 +49,20 @@ interface HighlightState {
 }
 
 let state: HighlightState | null = null
+let tooltipHideTimer: ReturnType<typeof setTimeout> | null = null
+let onReplaceCallback: ((token: string, original: string, type: PIIType) => void) | null = null
+
+export function setOnReplace(cb: (token: string, original: string, type: PIIType) => void) {
+  onReplaceCallback = cb
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
 function copyStyles(source: HTMLElement, target: HTMLDivElement) {
   const computed = window.getComputedStyle(source)
@@ -93,6 +107,16 @@ export function createHighlightLayer(inputEl: HTMLElement): HighlightState {
   warningDiv.className = 'pii-shield-warning'
   warningDiv.style.display = 'none'
   warningDiv.textContent = '⚠ Remove sensitive info before sending'
+
+  tooltipDiv.addEventListener('mouseenter', () => {
+    if (tooltipHideTimer) {
+      clearTimeout(tooltipHideTimer)
+      tooltipHideTimer = null
+    }
+  })
+  tooltipDiv.addEventListener('mouseleave', () => {
+    scheduleHideTooltip()
+  })
 
   document.body.appendChild(highlightDiv)
   document.body.appendChild(badgeDiv)
@@ -151,13 +175,14 @@ export function renderHighlights(text: string, matches: PIIMatch[]) {
 
     const mark = document.createElement('mark')
     mark.className = `pii-shield-mark pii-shield-mark-${match.type.toLowerCase()}`
-    mark.style.background = TYPE_BG[match.type] || 'rgba(99,102,241,0.12)'
-    mark.style.borderBottom = `2px solid ${TYPE_COLORS[match.type] || '#6366f1'}`
+    mark.style.background = TYPE_BG[match.type] || 'rgba(129,161,193,0.14)'
+    mark.style.borderBottom = `2px solid ${TYPE_COLORS[match.type] || '#81a1c1'}`
     mark.style.borderRadius = '2px'
     mark.style.color = 'transparent'
     mark.style.position = 'relative'
 
-    mark.dataset.fakeValue = getFakeReplacement(match)
+    const token = getTokenForMatch(match)
+    mark.dataset.token = token
     mark.dataset.type = match.type
     mark.dataset.original = match.text
 
@@ -193,7 +218,6 @@ function updateBadge(count: number) {
   const scrollX = window.scrollX
   const scrollY = window.scrollY
 
-  // Anchor right edge of badge to right edge of textarea
   badgeDiv.style.display = 'flex'
   badgeDiv.style.position = 'absolute'
   badgeDiv.style.top = `${rect.top + scrollY - 30}px`
@@ -201,7 +225,6 @@ function updateBadge(count: number) {
   badgeDiv.style.zIndex = '2147483646'
   badgeDiv.title = `${count} PII item${count > 1 ? 's' : ''} detected`
 
-  // Count pill — create once, update text
   let countSpan = badgeDiv.querySelector<HTMLSpanElement>('.pii-shield-badge-count')
   if (!countSpan) {
     countSpan = document.createElement('span')
@@ -210,7 +233,6 @@ function updateBadge(count: number) {
   }
   countSpan.textContent = String(count)
 
-  // Replace button — create once, persist across re-renders
   if (!badgeDiv.querySelector('.pii-shield-replace-btn')) {
     const btn = document.createElement('button')
     btn.className = 'pii-shield-replace-btn'
@@ -224,31 +246,76 @@ function updateBadge(count: number) {
   }
 }
 
-export function showTooltip(x: number, y: number, type: PIIType, fakeValue: string, original: string) {
+export function showTooltip(x: number, y: number, type: PIIType, token: string, original: string) {
   if (!state) return
   const { tooltipDiv } = state
 
-  const color = TYPE_COLORS[type] || '#6366f1'
+  if (tooltipHideTimer) {
+    clearTimeout(tooltipHideTimer)
+    tooltipHideTimer = null
+  }
+
+  const color = TYPE_COLORS[type] || '#81a1c1'
   tooltipDiv.innerHTML = `
-    <div style="font-size:10px;color:#94a3b8;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em">${type}</div>
-    <div style="font-size:12px;color:#e2e8f0;margin-bottom:6px;font-family:monospace">${escapeHtml(original)}</div>
-    <div style="font-size:10px;color:#94a3b8;margin-bottom:2px">Replace with:</div>
-    <div style="font-size:12px;font-weight:600;color:${color};font-family:monospace">${escapeHtml(fakeValue)}</div>
+    <div class="pii-shield-tooltip-type">${type}</div>
+    <div class="pii-shield-tooltip-original">"${escapeHtml(original)}"</div>
+    <div class="pii-shield-tooltip-token" style="color:${color}">&rarr; ${escapeHtml(token)}</div>
+    <button class="pii-shield-tooltip-replace" data-token="${escapeAttr(token)}" data-original="${escapeAttr(original)}" data-type="${escapeAttr(type)}">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 12.5V14h1.5l8.8-8.8-1.5-1.5L2 12.5zM14.7 4.1c.2-.2.2-.5 0-.7l-.8-.8c-.2-.2-.5-.2-.7 0l-.7.7 1.5 1.5.7-.7z" fill="currentColor"/></svg>
+      Replace now
+    </button>
   `
+
+  const viewW = window.innerWidth
+  const viewH = window.innerHeight
+  let left = x + 12
+  let top = y - 80
+
+  if (left + 280 > viewW) left = viewW - 290
+  if (top < 8) top = y + 20
+  if (top + 120 > viewH) top = viewH - 130
+
   tooltipDiv.style.display = 'block'
   tooltipDiv.style.position = 'fixed'
-  tooltipDiv.style.left = `${x + 12}px`
-  tooltipDiv.style.top = `${y - 80}px`
+  tooltipDiv.style.left = `${left}px`
+  tooltipDiv.style.top = `${top}px`
   tooltipDiv.style.zIndex = '2147483647'
+  tooltipDiv.style.pointerEvents = 'auto'
+
+  const replaceBtn = tooltipDiv.querySelector('.pii-shield-tooltip-replace') as HTMLButtonElement | null
+  if (replaceBtn) {
+    replaceBtn.onclick = (e) => {
+      e.stopPropagation()
+      e.preventDefault()
+      const t = replaceBtn.dataset.token || ''
+      const o = replaceBtn.dataset.original || ''
+      const tp = (replaceBtn.dataset.type || 'NAME') as PIIType
+      if (onReplaceCallback) {
+        onReplaceCallback(t, o, tp)
+      }
+      hideTooltip()
+    }
+  }
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+function scheduleHideTooltip() {
+  if (tooltipHideTimer) clearTimeout(tooltipHideTimer)
+  tooltipHideTimer = setTimeout(() => {
+    hideTooltip()
+  }, 300)
 }
 
 export function hideTooltip() {
   if (!state) return
   state.tooltipDiv.style.display = 'none'
+  if (tooltipHideTimer) {
+    clearTimeout(tooltipHideTimer)
+    tooltipHideTimer = null
+  }
+}
+
+export function scheduleHide() {
+  scheduleHideTooltip()
 }
 
 export function showBlockWarning() {
@@ -265,7 +332,6 @@ export function showBlockWarning() {
   warningDiv.style.top = `${rect.bottom + scrollY + 6}px`
   warningDiv.style.left = `${rect.left + scrollX}px`
 
-  // Re-trigger animation
   warningDiv.style.animation = 'none'
   void warningDiv.offsetWidth
   warningDiv.style.animation = ''

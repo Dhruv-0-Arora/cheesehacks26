@@ -22,23 +22,32 @@ export function setReplacementMap(map: Record<string, string>) {
 }
 
 export async function loadReplacementMap(): Promise<Record<string, string>> {
+  if (!isContextValid()) return getReplacementMap()
   return new Promise((resolve) => {
-    if (typeof chrome !== 'undefined' && chrome.storage?.session) {
+    try {
       chrome.storage.session.get('replacementMap', (result) => {
+        if (chrome.runtime.lastError) {
+          resolve(getReplacementMap())
+          return
+        }
         if (result.replacementMap) replacementMap = result.replacementMap as Record<string, string>
         resolve(getReplacementMap())
       })
-    } else {
+    } catch {
       resolve(getReplacementMap())
     }
   })
 }
 
 export async function saveReplacementMap(): Promise<void> {
+  if (!isContextValid()) return
   return new Promise((resolve) => {
-    if (typeof chrome !== 'undefined' && chrome.storage?.session) {
-      chrome.storage.session.set({ replacementMap }, () => resolve())
-    } else {
+    try {
+      chrome.storage.session.set({ replacementMap }, () => {
+        if (chrome.runtime.lastError) { /* ignore */ }
+        resolve()
+      })
+    } catch {
       resolve()
     }
   })
@@ -63,6 +72,14 @@ const PATH_TOKEN = '[REDACTED: PATH]'
 
 const counters: Record<string, number> = {}
 let tokenMap: TokenMap = {}
+
+function isContextValid(): boolean {
+  try {
+    return !!(typeof chrome !== 'undefined' && chrome.runtime?.id)
+  } catch {
+    return false
+  }
+}
 
 export function getTokenMap(): TokenMap {
   return { ...tokenMap }
@@ -135,25 +152,34 @@ export function getTokenForMatch(match: PIIMatch): string {
 }
 
 export async function loadTokenMap(): Promise<TokenMap> {
+  if (!isContextValid()) return getTokenMap()
   return new Promise((resolve) => {
-    if (typeof chrome !== 'undefined' && chrome.storage?.session) {
+    try {
       chrome.storage.session.get('tokenMap', (result) => {
+        if (chrome.runtime.lastError) {
+          resolve(getTokenMap())
+          return
+        }
         if (result.tokenMap) {
           tokenMap = result.tokenMap as TokenMap
         }
         resolve(getTokenMap())
       })
-    } else {
+    } catch {
       resolve(getTokenMap())
     }
   })
 }
 
 export async function saveTokenMap(): Promise<void> {
+  if (!isContextValid()) return
   return new Promise((resolve) => {
-    if (typeof chrome !== 'undefined' && chrome.storage?.session) {
-      chrome.storage.session.set({ tokenMap }, () => resolve())
-    } else {
+    try {
+      chrome.storage.session.set({ tokenMap }, () => {
+        if (chrome.runtime.lastError) { /* ignore */ }
+        resolve()
+      })
+    } catch {
       resolve()
     }
   })

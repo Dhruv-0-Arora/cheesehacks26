@@ -81,9 +81,16 @@ function App() {
       <header className="popup-header">
         <div className="logo-row">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <rect width="24" height="24" rx="6" fill="#6366f1" />
-            <path d="M12 6C9.79 6 8 7.79 8 10c0 1.48.81 2.77 2 3.46V15a1 1 0 001 1h2a1 1 0 001-1v-1.54c1.19-.69 2-1.98 2-3.46 0-2.21-1.79-4-4-4z" fill="white" />
-            <rect x="10" y="17" width="4" height="1.5" rx=".75" fill="white" />
+            <defs>
+              <linearGradient id="logoGrad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#bf616a" />
+                <stop offset="50%" stopColor="#d08770" />
+                <stop offset="100%" stopColor="#ebcb8b" />
+              </linearGradient>
+            </defs>
+            <rect width="24" height="24" rx="7" fill="url(#logoGrad)" />
+            <path d="M12 6C9.79 6 8 7.79 8 10c0 1.48.81 2.77 2 3.46V15a1 1 0 001 1h2a1 1 0 001-1v-1.54c1.19-.69 2-1.98 2-3.46 0-2.21-1.79-4-4-4z" fill="#eceff4" />
+            <rect x="10" y="17" width="4" height="1.5" rx=".75" fill="rgba(236,239,244,0.7)" />
           </svg>
           <h1>PII Shield</h1>
         </div>
