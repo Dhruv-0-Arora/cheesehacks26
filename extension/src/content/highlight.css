@@ -1,0 +1,142 @@
+.pii-shield-highlight-layer {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2147483640;
+  background: transparent;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: transparent;
+}
+
+/* -- Highlight marks -- */
+
+.pii-shield-mark {
+  color: transparent;
+  border-radius: 2px;
+  position: relative;
+  pointer-events: auto;
+  cursor: default;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.pii-shield-mark:hover {
+  filter: brightness(0.92);
+}
+
+.pii-shield-mark-name {
+  background: rgba(59, 130, 246, 0.12);
+  border-bottom: 2px solid #3b82f6;
+}
+
+.pii-shield-mark-email {
+  background: rgba(245, 158, 11, 0.12);
+  border-bottom: 2px solid #f59e0b;
+}
+
+.pii-shield-mark-phone {
+  background: rgba(139, 92, 246, 0.12);
+  border-bottom: 2px solid #8b5cf6;
+}
+
+.pii-shield-mark-financial {
+  background: rgba(239, 68, 68, 0.15);
+  border-bottom: 2px solid #ef4444;
+}
+
+.pii-shield-mark-ssn {
+  background: rgba(239, 68, 68, 0.15);
+  border-bottom: 2px solid #ef4444;
+}
+
+.pii-shield-mark-id {
+  background: rgba(236, 72, 153, 0.12);
+  border-bottom: 2px solid #ec4899;
+}
+
+.pii-shield-mark-address {
+  background: rgba(6, 182, 212, 0.12);
+  border-bottom: 2px solid #06b6d4;
+}
+
+.pii-shield-mark-secret {
+  background: rgba(220, 38, 38, 0.15);
+  border-bottom: 2px solid #dc2626;
+}
+
+.pii-shield-mark-url {
+  background: rgba(99, 102, 241, 0.12);
+  border-bottom: 2px solid #6366f1;
+}
+
+.pii-shield-mark-date {
+  background: rgba(20, 184, 166, 0.12);
+  border-bottom: 2px solid #14b8a6;
+}
+
+.pii-shield-mark-custom {
+  background: rgba(249, 115, 22, 0.12);
+  border-bottom: 2px solid #f97316;
+}
+
+/* -- PII Count Badge -- */
+
+.pii-shield-badge {
+  position: absolute;
+  z-index: 2147483646;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pii-shield-badge-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: #6366f1;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
+  animation: pii-shield-pulse 2s ease-in-out infinite;
+}
+
+/* -- Tooltip -- */
+
+.pii-shield-tooltip {
+  position: fixed;
+  z-index: 2147483647;
+  background: #1e293b;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  max-width: 260px;
+  white-space: normal;
+}
+
+/* -- Unmasked tokens in responses -- */
+
+.pii-shield-unmasked {
+  background: rgba(34, 197, 94, 0.1);
+  border-bottom: 1px dashed #22c55e;
+  border-radius: 2px;
+  cursor: help;
+}
+
+/* -- Animations -- */
+
+@keyframes pii-shield-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
