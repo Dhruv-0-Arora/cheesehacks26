@@ -16,12 +16,16 @@
   border-radius: 2px;
   position: relative;
   pointer-events: auto;
-  cursor: default;
+  cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
 }
 
 .pii-shield-mark:hover {
-  filter: brightness(0.92);
+  filter: brightness(0.88);
+}
+
+.pii-shield-mark:active {
+  filter: brightness(0.75);
 }
 
 .pii-shield-mark-name {

@@ -235,10 +235,16 @@ export function showTooltip(x: number, y: number, type: PIIType, fakeValue: stri
     <div style="font-size:10px;color:#94a3b8;margin-bottom:2px">Replace with:</div>
     <div style="font-size:12px;font-weight:600;color:${color};font-family:monospace">${escapeHtml(fakeValue)}</div>
   `
+  // Position above cursor; clamp so it never goes off-screen
+  const TOP_OFFSET = 90
+  const SIDE_MARGIN = 10
+  const top  = y - TOP_OFFSET < SIDE_MARGIN ? y + 16 : y - TOP_OFFSET
+  const left = Math.min(x + 12, window.innerWidth - 280 - SIDE_MARGIN)
+
   tooltipDiv.style.display = 'block'
   tooltipDiv.style.position = 'fixed'
-  tooltipDiv.style.left = `${x + 12}px`
-  tooltipDiv.style.top = `${y - 80}px`
+  tooltipDiv.style.left = `${left}px`
+  tooltipDiv.style.top = `${top}px`
   tooltipDiv.style.zIndex = '2147483647'
 }
 
