@@ -6,6 +6,7 @@ import { FinancialDetector } from './financial.ts'
 import { IdentityDetector } from './identity.ts'
 import { NetworkDetector } from './network.ts'
 import { AddressDetector } from './address.ts'
+import { LogDetector } from './log.ts'
 import { ContextualDetector } from './base.ts'
 
 const detectorInstances = [
@@ -16,6 +17,7 @@ const detectorInstances = [
   new IdentityDetector(),
   new NetworkDetector(),
   new AddressDetector(),
+  new LogDetector(),
 ]
 
 export function buildCustomDetector(blockList: string[]): ContextualDetector | null {

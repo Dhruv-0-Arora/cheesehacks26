@@ -10,6 +10,7 @@ export type PIIType =
   | 'URL'
   | 'DATE'
   | 'CUSTOM'
+  | 'PATH'
 
 export interface PIIMatch {
   text: string

@@ -1,17 +1,18 @@
 import { detectSite } from './sites.ts'
 import { analyzeText } from '../detectors/engine.ts'
-import { createHighlightLayer, renderHighlights, cleanup, showTooltip, hideTooltip } from './highlighter.ts'
+import { createHighlightLayer, renderHighlights, cleanup, showTooltip, hideTooltip, setReplaceCallback } from './highlighter.ts'
 import { setCurrentMatches, setupInterceptor, setupResponseUnmasking } from './interceptor.ts'
 import { watchForInput } from './observer.ts'
-import { loadTokenMap } from '../tokens/manager.ts'
+import { loadTokenMap, loadReplacementMap, getFakeReplacement, saveReplacementMap } from '../tokens/manager.ts'
 import type { PIIMatch, ExtensionSettings, PIIType } from '../types.ts'
 
 let enabled = true
-let enabledTypes: PIIType[] = ['NAME', 'EMAIL', 'PHONE', 'FINANCIAL', 'SSN', 'ID', 'ADDRESS', 'SECRET', 'URL', 'DATE']
+let enabledTypes: PIIType[] = ['NAME', 'EMAIL', 'PHONE', 'FINANCIAL', 'SSN', 'ID', 'ADDRESS', 'SECRET', 'URL', 'DATE', 'PATH']
 let customBlockList: string[] = []
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let currentInputEl: HTMLElement | null = null
 let lastProcessedText = ''
+let currentMatches: PIIMatch[] = []
 
 const adapter = detectSite()
 console.log(`[PII Shield] Loaded on ${adapter.name}`)
@@ -37,6 +38,7 @@ function processInput(el: HTMLElement) {
   }
 
   const matches = analyzeText(text, enabledTypes, customBlockList)
+  currentMatches = matches
   renderHighlights(text, matches)
   setCurrentMatches(matches)
 
@@ -52,8 +54,32 @@ function debouncedProcess(el: HTMLElement) {
   debounceTimer = setTimeout(() => processInput(el), 200)
 }
 
+function replaceAll() {
+  if (!currentInputEl || currentMatches.length === 0) return
+
+  const text = adapter.getInputText(currentInputEl)
+  // Replace end-to-start so indices stay valid
+  const sorted = [...currentMatches].sort((a, b) => b.start - a.start)
+
+  let result = text
+  for (const match of sorted) {
+    const fake = getFakeReplacement(match)
+    result = result.slice(0, match.start) + fake + result.slice(match.end)
+  }
+
+  // Set lastProcessedText BEFORE dispatching 'input' so debouncedProcess skips re-detection
+  lastProcessedText = result
+  currentMatches = []
+  setCurrentMatches([])
+  renderHighlights('', [])
+
+  adapter.setInputText(currentInputEl, result)
+  saveReplacementMap()
+}
+
 function onInputFound(inputEl: HTMLElement) {
   currentInputEl = inputEl
+  setReplaceCallback(replaceAll)
   createHighlightLayer(inputEl)
 
   inputEl.addEventListener('input', () => debouncedProcess(inputEl))
@@ -74,6 +100,7 @@ function onInputLost(_el: HTMLElement) {
 
 function init() {
   loadTokenMap()
+  loadReplacementMap()
 
   chrome.runtime?.sendMessage?.({ action: 'GET_SETTINGS' }, (res) => {
     if (res?.settings) {
@@ -95,12 +122,12 @@ function init() {
 
   document.addEventListener('mouseover', (e) => {
     const mark = (e.target as HTMLElement).closest?.('.pii-shield-mark') as HTMLElement | null
-    if (mark?.dataset.token && mark.dataset.type && mark.dataset.original) {
+    if (mark?.dataset.fakeValue && mark.dataset.type && mark.dataset.original) {
       showTooltip(
         e.clientX,
         e.clientY,
         mark.dataset.type as PIIType,
-        mark.dataset.token,
+        mark.dataset.fakeValue,
         mark.dataset.original
       )
     }

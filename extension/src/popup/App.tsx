@@ -3,7 +3,7 @@ import type { ExtensionSettings, TokenMap, PIIType } from '../types.ts'
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
   enabled: true,
-  enabledTypes: ['NAME', 'EMAIL', 'PHONE', 'FINANCIAL', 'SSN', 'ID', 'ADDRESS', 'SECRET', 'URL', 'DATE'],
+  enabledTypes: ['NAME', 'EMAIL', 'PHONE', 'FINANCIAL', 'SSN', 'ID', 'ADDRESS', 'SECRET', 'URL', 'DATE', 'PATH'],
   customBlockList: [],
 }
 
@@ -19,11 +19,13 @@ const PII_TYPE_LABELS: Record<PIIType, string> = {
   URL: 'URLs',
   DATE: 'Dates',
   CUSTOM: 'Custom Terms',
+  PATH: 'File Paths',
 }
 
 function App() {
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS)
   const [tokenMap, setTokenMap] = useState<TokenMap>({})
+  const [replacementMap, setReplacementMap] = useState<Record<string, string>>({})
   const [customTerm, setCustomTerm] = useState('')
 
   useEffect(() => {
@@ -32,6 +34,9 @@ function App() {
     })
     chrome.runtime?.sendMessage({ action: 'GET_TOKEN_MAP' }, (res) => {
       if (res?.tokenMap) setTokenMap(res.tokenMap)
+    })
+    chrome.runtime?.sendMessage({ action: 'GET_REPLACEMENT_MAP' }, (res) => {
+      if (res?.replacementMap) setReplacementMap(res.replacementMap)
     })
   }, [])
 
@@ -66,6 +71,11 @@ function App() {
     typeCounts[type] = (typeCounts[type] || 0) + 1
   }
 
+  const replacementEntries = Object.entries(replacementMap).map(([key, fake]) => {
+    const colon = key.indexOf(':')
+    return { type: key.slice(0, colon), original: key.slice(colon + 1), fake }
+  })
+
   return (
     <div className="popup-container">
       <header className="popup-header">
@@ -93,6 +103,25 @@ function App() {
               <div key={type} className="stat-chip">
                 <span className="stat-count">{count}</span>
                 <span className="stat-label">{type.toLowerCase()}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {replacementEntries.length > 0 && (
+        <section className="section">
+          <h2>Replacement Map</h2>
+          <p style={{ fontSize: '11px', color: '#888', marginBottom: '8px' }}>
+            Same original value always maps to the same replacement.
+          </p>
+          <div className="token-list">
+            {replacementEntries.map(({ type, original, fake }) => (
+              <div key={`${type}:${original}`} className="token-row">
+                <span className="token-key" style={{ color: '#999', fontSize: '10px', flexShrink: 0 }}>{type}</span>
+                <span className="token-value" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{original}</span>
+                <span className="token-arrow">&rarr;</span>
+                <span className="token-value" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{fake}</span>
               </div>
             ))}
           </div>

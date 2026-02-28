@@ -1,5 +1,11 @@
 import type { PIIMatch, PIIType } from '../types.ts'
-import { getTokenForMatch } from '../tokens/manager.ts'
+import { getFakeReplacement } from '../tokens/manager.ts'
+
+let replaceCallback: (() => void) | null = null
+
+export function setReplaceCallback(fn: () => void) {
+  replaceCallback = fn
+}
 
 const TYPE_COLORS: Record<PIIType, string> = {
   NAME: '#3b82f6',
@@ -13,6 +19,7 @@ const TYPE_COLORS: Record<PIIType, string> = {
   URL: '#6366f1',
   DATE: '#14b8a6',
   CUSTOM: '#f97316',
+  PATH: '#10b981',
 }
 
 const TYPE_BG: Record<PIIType, string> = {
@@ -27,6 +34,7 @@ const TYPE_BG: Record<PIIType, string> = {
   URL: 'rgba(99,102,241,0.12)',
   DATE: 'rgba(20,184,166,0.12)',
   CUSTOM: 'rgba(249,115,22,0.12)',
+  PATH: 'rgba(16,185,129,0.12)',
 }
 
 interface HighlightState {
@@ -34,8 +42,10 @@ interface HighlightState {
   highlightDiv: HTMLDivElement
   badgeDiv: HTMLDivElement
   tooltipDiv: HTMLDivElement
+  warningDiv: HTMLDivElement
   scrollSyncHandler: (() => void) | null
   resizeObserver: ResizeObserver | null
+  warningTimer: ReturnType<typeof setTimeout> | null
 }
 
 let state: HighlightState | null = null
@@ -79,9 +89,15 @@ export function createHighlightLayer(inputEl: HTMLElement): HighlightState {
   tooltipDiv.className = 'pii-shield-tooltip'
   tooltipDiv.style.display = 'none'
 
+  const warningDiv = document.createElement('div')
+  warningDiv.className = 'pii-shield-warning'
+  warningDiv.style.display = 'none'
+  warningDiv.textContent = '⚠ Remove sensitive info before sending'
+
   document.body.appendChild(highlightDiv)
   document.body.appendChild(badgeDiv)
   document.body.appendChild(tooltipDiv)
+  document.body.appendChild(warningDiv)
 
   positionHighlightLayer(inputEl, highlightDiv)
   copyStyles(inputEl, highlightDiv)
@@ -98,7 +114,7 @@ export function createHighlightLayer(inputEl: HTMLElement): HighlightState {
   })
   resizeObserver.observe(inputEl)
 
-  state = { inputEl, highlightDiv, badgeDiv, tooltipDiv, scrollSyncHandler, resizeObserver }
+  state = { inputEl, highlightDiv, badgeDiv, tooltipDiv, warningDiv, scrollSyncHandler, resizeObserver, warningTimer: null }
   return state
 }
 
@@ -120,7 +136,7 @@ function positionHighlightLayer(inputEl: HTMLElement, highlightDiv: HTMLDivEleme
 export function renderHighlights(text: string, matches: PIIMatch[]) {
   if (!state) return
 
-  const { highlightDiv, badgeDiv, inputEl } = state
+  const { highlightDiv, inputEl } = state
 
   positionHighlightLayer(inputEl, highlightDiv)
 
@@ -141,8 +157,7 @@ export function renderHighlights(text: string, matches: PIIMatch[]) {
     mark.style.color = 'transparent'
     mark.style.position = 'relative'
 
-    const token = getTokenForMatch(match)
-    mark.dataset.token = token
+    mark.dataset.fakeValue = getFakeReplacement(match)
     mark.dataset.type = match.type
     mark.dataset.original = match.text
 
@@ -178,31 +193,57 @@ function updateBadge(count: number) {
   const scrollX = window.scrollX
   const scrollY = window.scrollY
 
+  // Anchor right edge of badge to right edge of textarea
   badgeDiv.style.display = 'flex'
   badgeDiv.style.position = 'absolute'
-  badgeDiv.style.top = `${rect.top + scrollY - 12}px`
-  badgeDiv.style.right = 'auto'
-  badgeDiv.style.left = `${rect.right + scrollX - 36}px`
+  badgeDiv.style.top = `${rect.top + scrollY - 30}px`
+  badgeDiv.style.left = `${rect.right + scrollX}px`
   badgeDiv.style.zIndex = '2147483646'
-  badgeDiv.innerHTML = `<span class="pii-shield-badge-count">${count}</span>`
   badgeDiv.title = `${count} PII item${count > 1 ? 's' : ''} detected`
+
+  // Count pill — create once, update text
+  let countSpan = badgeDiv.querySelector<HTMLSpanElement>('.pii-shield-badge-count')
+  if (!countSpan) {
+    countSpan = document.createElement('span')
+    countSpan.className = 'pii-shield-badge-count'
+    badgeDiv.appendChild(countSpan)
+  }
+  countSpan.textContent = String(count)
+
+  // Replace button — create once, persist across re-renders
+  if (!badgeDiv.querySelector('.pii-shield-replace-btn')) {
+    const btn = document.createElement('button')
+    btn.className = 'pii-shield-replace-btn'
+    btn.textContent = 'Replace All'
+    btn.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      replaceCallback?.()
+    })
+    badgeDiv.insertBefore(btn, countSpan)
+  }
 }
 
-export function showTooltip(x: number, y: number, type: PIIType, token: string, original: string) {
+export function showTooltip(x: number, y: number, type: PIIType, fakeValue: string, original: string) {
   if (!state) return
   const { tooltipDiv } = state
 
   const color = TYPE_COLORS[type] || '#6366f1'
   tooltipDiv.innerHTML = `
-    <div style="font-size:11px;color:#888;margin-bottom:2px">${type}</div>
-    <div style="font-size:12px;color:#333;margin-bottom:4px">"${original}"</div>
-    <div style="font-size:12px;font-weight:600;color:${color}">&rarr; ${token}</div>
+    <div style="font-size:10px;color:#94a3b8;margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em">${type}</div>
+    <div style="font-size:12px;color:#e2e8f0;margin-bottom:6px;font-family:monospace">${escapeHtml(original)}</div>
+    <div style="font-size:10px;color:#94a3b8;margin-bottom:2px">Replace with:</div>
+    <div style="font-size:12px;font-weight:600;color:${color};font-family:monospace">${escapeHtml(fakeValue)}</div>
   `
   tooltipDiv.style.display = 'block'
   tooltipDiv.style.position = 'fixed'
-  tooltipDiv.style.left = `${x + 10}px`
-  tooltipDiv.style.top = `${y - 60}px`
+  tooltipDiv.style.left = `${x + 12}px`
+  tooltipDiv.style.top = `${y - 80}px`
   tooltipDiv.style.zIndex = '2147483647'
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 export function hideTooltip() {
@@ -210,15 +251,50 @@ export function hideTooltip() {
   state.tooltipDiv.style.display = 'none'
 }
 
+export function showBlockWarning() {
+  if (!state) return
+  const { warningDiv, inputEl } = state
+
+  if (state.warningTimer) clearTimeout(state.warningTimer)
+
+  const rect = getInputRect(inputEl)
+  const scrollX = window.scrollX
+  const scrollY = window.scrollY
+
+  warningDiv.style.display = 'block'
+  warningDiv.style.top = `${rect.bottom + scrollY + 6}px`
+  warningDiv.style.left = `${rect.left + scrollX}px`
+
+  // Re-trigger animation
+  warningDiv.style.animation = 'none'
+  void warningDiv.offsetWidth
+  warningDiv.style.animation = ''
+
+  state.warningTimer = setTimeout(() => {
+    if (state) state.warningDiv.style.display = 'none'
+  }, 3000)
+}
+
+export function hideBlockWarning() {
+  if (!state) return
+  if (state.warningTimer) {
+    clearTimeout(state.warningTimer)
+    state.warningTimer = null
+  }
+  state.warningDiv.style.display = 'none'
+}
+
 export function cleanup() {
   if (!state) return
-  const { highlightDiv, badgeDiv, tooltipDiv, inputEl, scrollSyncHandler, resizeObserver } = state
+  const { highlightDiv, badgeDiv, tooltipDiv, warningDiv, inputEl, scrollSyncHandler, resizeObserver, warningTimer } = state
 
   if (scrollSyncHandler) inputEl.removeEventListener('scroll', scrollSyncHandler)
   if (resizeObserver) resizeObserver.disconnect()
+  if (warningTimer) clearTimeout(warningTimer)
   highlightDiv.remove()
   badgeDiv.remove()
   tooltipDiv.remove()
+  warningDiv.remove()
 
   state = null
 }

@@ -79,15 +79,21 @@
   border-bottom: 2px solid #f97316;
 }
 
+.pii-shield-mark-path {
+  background: rgba(16, 185, 129, 0.12);
+  border-bottom: 2px solid #10b981;
+}
+
 /* -- PII Count Badge -- */
 
 .pii-shield-badge {
   position: absolute;
   z-index: 2147483646;
-  pointer-events: none;
+  pointer-events: auto;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
+  transform: translateX(-100%);
 }
 
 .pii-shield-badge-count {
@@ -105,6 +111,27 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
   animation: pii-shield-pulse 2s ease-in-out infinite;
+}
+
+.pii-shield-replace-btn {
+  cursor: pointer;
+  background: #6366f1;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.35);
+  transition: background 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+
+.pii-shield-replace-btn:hover {
+  background: #4f46e5;
+  box-shadow: 0 3px 10px rgba(99, 102, 241, 0.5);
 }
 
 /* -- Tooltip -- */
@@ -132,6 +159,30 @@
   border-bottom: 1px dashed #22c55e;
   border-radius: 2px;
   cursor: help;
+}
+
+/* -- Block Warning -- */
+
+.pii-shield-warning {
+  position: absolute;
+  z-index: 2147483647;
+  background: #dc2626;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  box-shadow: 0 4px 16px rgba(220, 38, 38, 0.4);
+  pointer-events: none;
+  white-space: nowrap;
+  animation: pii-shield-warning-in 0.15s ease-out;
+}
+
+@keyframes pii-shield-warning-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* -- Animations -- */

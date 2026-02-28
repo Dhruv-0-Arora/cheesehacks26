@@ -1,4 +1,48 @@
 import type { PIIMatch, PIIType, TokenMap, TokenizeResult } from '../types.ts'
+import { generateFake } from './fake-data.ts'
+
+// Replacement map: "${type}:${original}" → fake value
+// Persisted in session storage so the same PII always gets the same fake across queries.
+let replacementMap: Record<string, string> = {}
+
+export function getFakeReplacement(match: PIIMatch): string {
+  const key = `${match.type}:${match.text}`
+  if (replacementMap[key]) return replacementMap[key]
+  const fake = generateFake(match.text, match.type)
+  replacementMap[key] = fake
+  return fake
+}
+
+export function getReplacementMap(): Record<string, string> {
+  return { ...replacementMap }
+}
+
+export function setReplacementMap(map: Record<string, string>) {
+  replacementMap = { ...map }
+}
+
+export async function loadReplacementMap(): Promise<Record<string, string>> {
+  return new Promise((resolve) => {
+    if (typeof chrome !== 'undefined' && chrome.storage?.session) {
+      chrome.storage.session.get('replacementMap', (result) => {
+        if (result.replacementMap) replacementMap = result.replacementMap as Record<string, string>
+        resolve(getReplacementMap())
+      })
+    } else {
+      resolve(getReplacementMap())
+    }
+  })
+}
+
+export async function saveReplacementMap(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof chrome !== 'undefined' && chrome.storage?.session) {
+      chrome.storage.session.set({ replacementMap }, () => resolve())
+    } else {
+      resolve()
+    }
+  })
+}
 
 const TYPE_TOKEN_PREFIX: Record<PIIType, string> = {
   NAME: 'name',
@@ -12,7 +56,10 @@ const TYPE_TOKEN_PREFIX: Record<PIIType, string> = {
   URL: 'url',
   DATE: 'date',
   CUSTOM: 'custom',
+  PATH: 'path',
 }
+
+const PATH_TOKEN = '[REDACTED: PATH]'
 
 const counters: Record<string, number> = {}
 let tokenMap: TokenMap = {}
@@ -51,10 +98,15 @@ export function tokenize(matches: PIIMatch[], text: string): TokenizeResult {
   for (const match of matches) {
     maskedText += text.substring(currentIndex, match.start)
 
-    let token = findExistingToken(match.text)
-    if (!token) {
-      token = createToken(match.type)
-      tokenMap[token] = match.text
+    let token: string
+    if (match.type === 'PATH') {
+      token = PATH_TOKEN
+    } else {
+      token = findExistingToken(match.text) ?? ''
+      if (!token) {
+        token = createToken(match.type)
+        tokenMap[token] = match.text
+      }
     }
 
     maskedText += token
@@ -74,6 +126,7 @@ export function detokenize(maskedText: string): string {
 }
 
 export function getTokenForMatch(match: PIIMatch): string {
+  if (match.type === 'PATH') return PATH_TOKEN
   const existing = findExistingToken(match.text)
   if (existing) return existing
   const token = createToken(match.type)

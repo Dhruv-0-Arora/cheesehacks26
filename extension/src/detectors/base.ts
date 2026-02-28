@@ -10,7 +10,7 @@ export class ContextualDetector {
   protected checkLooseContext(
     text: string,
     index: number,
-    matchLen: number,
+    _matchLen: number,
     rule: DetectionRule
   ): boolean {
     if (!rule.keywords || rule.keywords.length === 0) return true

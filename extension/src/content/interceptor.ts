@@ -1,5 +1,6 @@
 import type { SiteAdapter, PIIMatch, TokenMap } from '../types.ts'
-import { tokenize, detokenize, getTokenMap, saveTokenMap } from '../tokens/manager.ts'
+import { detokenize, getTokenMap } from '../tokens/manager.ts'
+import { showBlockWarning } from './highlighter.ts'
 
 let lastMatches: PIIMatch[] = []
 let interceptActive = false
@@ -24,22 +25,7 @@ export function setupInterceptor(adapter: SiteAdapter) {
       e.preventDefault()
       e.stopPropagation()
 
-      const { maskedText } = tokenize(lastMatches, text)
-      adapter.setInputText(inputEl, maskedText)
-      saveTokenMap()
-
-      lastMatches = []
-
-      setTimeout(() => {
-        const sendBtn = adapter.getSendButton()
-        if (sendBtn) {
-          sendBtn.click()
-        } else {
-          inputEl.dispatchEvent(new KeyboardEvent('keydown', {
-            key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true,
-          }))
-        }
-      }, 50)
+      showBlockWarning()
     }
   }, true)
 
@@ -57,15 +43,7 @@ export function setupInterceptor(adapter: SiteAdapter) {
       e.preventDefault()
       e.stopPropagation()
 
-      const { maskedText } = tokenize(lastMatches, text)
-      adapter.setInputText(inputEl, maskedText)
-      saveTokenMap()
-
-      lastMatches = []
-
-      setTimeout(() => {
-        sendBtn.click()
-      }, 50)
+      showBlockWarning()
     }, true)
   }
 }
@@ -87,7 +65,7 @@ export function setupResponseUnmasking(adapter: SiteAdapter) {
   observer.observe(document.body, { childList: true, subtree: true, characterData: true })
 }
 
-function unmaskResponseElement(container: HTMLElement, tokenMap: TokenMap) {
+function unmaskResponseElement(container: HTMLElement, _tokenMap: TokenMap) {
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null)
   const textNodes: Text[] = []
 

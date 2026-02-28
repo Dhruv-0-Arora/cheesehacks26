@@ -2,7 +2,7 @@ import type { ExtensionSettings, TokenMap } from '../types.ts'
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
   enabled: true,
-  enabledTypes: ['NAME', 'EMAIL', 'PHONE', 'FINANCIAL', 'SSN', 'ID', 'ADDRESS', 'SECRET', 'URL', 'DATE'],
+  enabledTypes: ['NAME', 'EMAIL', 'PHONE', 'FINANCIAL', 'SSN', 'ID', 'ADDRESS', 'SECRET', 'URL', 'DATE', 'PATH'],
   customBlockList: [],
 }
 
@@ -72,6 +72,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       case 'SAVE_TOKEN_MAP': {
         await saveTokenMap(message.tokenMap)
         return { ok: true }
+      }
+      case 'GET_REPLACEMENT_MAP': {
+        const replacementMap = await new Promise<Record<string, string>>((resolve) => {
+          chrome.storage.session.get('replacementMap', (r) => {
+            resolve((r.replacementMap as Record<string, string>) || {})
+          })
+        })
+        return { replacementMap }
       }
       case 'UPDATE_STATS': {
         sessionStats.totalMasked += message.matchCount || 0
