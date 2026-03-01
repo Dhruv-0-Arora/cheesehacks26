@@ -17,19 +17,18 @@ import numpy as np
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 # Force CPU-only -- Metal GPU dispatch overhead exceeds gains for this model size
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
-os.environ["METAL_DEVICE_WRAPPER_TYPE"] = "0"
 import tensorflow as tf  # noqa: E402
-tf.config.set_visible_devices([], "GPU")
+from tensorflow.keras import mixed_precision
+mixed_precision.set_global_policy("mixed_float16")
 
 DATA_DIR = Path(__file__).parent / "data"
-MODEL_PATH = Path("/Volumes/wintermute/docs/fhegis/pii_ner.h5")
+MODEL_PATH = Path("/mnt/external/docs/fhegis/pii_ner.h5")
 
 MAX_SEQ_LEN = 128
 VOCAB_SIZE = 12000
 EMBED_DIM = 96
 LSTM_UNITS = 96
-BATCH_SIZE = 256
+BATCH_SIZE = 512
 EPOCHS = 15
 
 PAD_TOKEN = "<PAD>"
@@ -85,7 +84,7 @@ def encode_samples(
 def build_model(vocab_size: int, num_labels: int) -> tf.keras.Model:
     inputs = tf.keras.layers.Input(shape=(MAX_SEQ_LEN,), dtype="int32", name="word_ids")
 
-    x = tf.keras.layers.Embedding(vocab_size, EMBED_DIM, mask_zero=True)(inputs)
+    x = tf.keras.layers.Embedding(vocab_size, EMBED_DIM)(inputs)
     x = tf.keras.layers.SpatialDropout1D(0.2)(x)
     x = tf.keras.layers.Bidirectional(
         tf.keras.layers.LSTM(LSTM_UNITS, return_sequences=True)
@@ -98,7 +97,7 @@ def build_model(vocab_size: int, num_labels: int) -> tf.keras.Model:
     )(x)
     x = tf.keras.layers.Dropout(0.35)(x)
     outputs = tf.keras.layers.TimeDistributed(
-        tf.keras.layers.Dense(num_labels, activation="softmax")
+        tf.keras.layers.Dense(num_labels, activation="softmax", dtype="float32")
     )(x)
 
     model = tf.keras.Model(inputs, outputs, name="pii_ner")
@@ -106,7 +105,9 @@ def build_model(vocab_size: int, num_labels: int) -> tf.keras.Model:
 
 
 def main():
-    print("Training on CPU")
+    gpus = tf.config.list_physical_devices("GPU")
+    print(f"Training on: {gpus if gpus else 'CPU (no GPU found)'}")
+
     print("Loading data...")
     train_data = load_data(DATA_DIR / "train.json")
     val_data = load_data(DATA_DIR / "val.json")
@@ -162,12 +163,21 @@ def main():
     ]
 
     print("Training...")
+    train_dataset = (
+        tf.data.Dataset.from_tensor_slices((X_train, Y_train, sample_weights_train))
+        .shuffle(len(X_train))
+        .batch(BATCH_SIZE)
+        .prefetch(tf.data.AUTOTUNE)
+    )
+    val_dataset = (
+        tf.data.Dataset.from_tensor_slices((X_val, Y_val))
+        .batch(BATCH_SIZE)
+        .prefetch(tf.data.AUTOTUNE)
+    )
+
     model.fit(
-        X_train,
-        Y_train,
-        sample_weight=sample_weights_train,
-        validation_data=(X_val, Y_val),
-        batch_size=BATCH_SIZE,
+        train_dataset,
+        validation_data=val_dataset,
         epochs=EPOCHS,
         callbacks=callbacks,
     )
