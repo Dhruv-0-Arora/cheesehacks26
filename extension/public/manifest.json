@@ -59,7 +59,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["assets/*", "fetch-interceptor.js", "pdf.worker.min.mjs"],
+      "resources": ["assets/*", "fetch-interceptor.js", "pdf.worker.min.mjs", "model/*"],
       "matches": ["<all_urls>"]
     }
   ]

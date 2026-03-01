@@ -1,5 +1,5 @@
 import { detectSite } from './sites.ts'
-import { analyzeText } from '../detectors/engine.ts'
+import { analyzeTextWithML } from '../detectors/engine.ts'
 import { createHighlightLayer, renderHighlights, cleanup, showTooltip, scheduleHide, setReplaceCallback, updateInspectPanelData, hideInspectPanel, resetActiveMode, hideTooltip, hideBadge, getState, cleanupAllUI } from './highlighter.ts'
 import { setCurrentMatches, setFileBlocked, setupInterceptor, setupResponseUnmasking, reapplyUnmasking } from './interceptor.ts'
 import { watchForInput, stopWatching } from './observer.ts'
@@ -118,7 +118,6 @@ function normalizePastedContent(el: HTMLElement) {
 
 function syncReplacements() {
   const replacements = currentMatches.map(m => {
-    // Auto-replace mode always uses tokens; manual mode respects user's choice
     const useTokens = autoReplace || activeMode === 'labels';
     return { original: m.text, fake: useTokens ? getTokenForMatch(m) : getFakeReplacement(m) };
   });
@@ -132,29 +131,17 @@ function syncReplacements() {
   saveReplacementMap();
 }
 
-/**
- * Strip PII-shield highlight wrappers from the input element so they
- * don't bleed into the chat history when the message is committed.
- */
 function stripHighlightWrappersFromInput() {
   if (!currentInputEl) return
-  // The highlight marks live in the overlay, not the actual input, so they
-  // shouldn't be in the input DOM.  But for contenteditable elements, the
-  // site may copy inner HTML. Defensively remove any .pii-shield-mark or
-  // .pii-shield-unmasked spans that somehow ended up inside the input.
   const marks = currentInputEl.querySelectorAll('.pii-shield-mark, .pii-shield-unmasked, .pii-shield-highlight-layer')
   marks.forEach(mark => {
     const parent = mark.parentNode
     if (!parent) return
-    // Replace the mark element with its text content
     const text = document.createTextNode(mark.textContent || '')
     parent.replaceChild(text, mark)
   })
 }
 
-/**
- * Full cleanup on message send: strip DOM wrappers, hide all UI, reset state.
- */
 function cleanupOnSend() {
   stripHighlightWrappersFromInput()
   cleanupAllUI()
@@ -166,9 +153,7 @@ function cleanupOnSend() {
   resetActiveMode()
 }
 
-
-
-function processInput(el: HTMLElement) {
+async function processInput(el: HTMLElement) {
   if (!enabled || dead) return
 
   let text = getInputText(el)
@@ -214,20 +199,37 @@ function processInput(el: HTMLElement) {
     return
   }
 
-  const rawMatches = analyzeText(text, enabledTypes, customBlockList)
   const knownFakes = getKnownFakeValues()
-  let matches = rawMatches.filter(m => !knownFakes.has(m.text))
-  matches = matches.filter(m => !ignoredTokens.has(m.text + ':' + m.type))
-  currentMatches = matches
-  renderHighlights(text, matches, autoReplace)
-  setCurrentMatches(matches, autoReplace)
-  syncReplacements()
-  updateInspectPanelData(text, matches, getTokenMap(), getReplacementMap())
+
+  function filterMatches(matches: PIIMatch[]): PIIMatch[] {
+    return matches
+      .filter(m => !knownFakes.has(m.text))
+      .filter(m => !ignoredTokens.has(m.text + ':' + m.type))
+  }
+
+  function applyMatches(matches: PIIMatch[]) {
+    currentMatches = matches
+    renderHighlights(text, matches, autoReplace)
+    setCurrentMatches(matches, autoReplace)
+    syncReplacements()
+    updateInspectPanelData(text, matches, getTokenMap(), getReplacementMap())
+  }
+
+  try {
+    const merged = await analyzeTextWithML(text, enabledTypes, customBlockList, (regexMatches) => {
+      applyMatches(filterMatches(regexMatches))
+    })
+    if (lastProcessedText === text && !dead) {
+      applyMatches(filterMatches(merged))
+    }
+  } catch {
+    // ML unavailable — regex results already applied via callback
+  }
 
   safeSendMessage({
     action: 'UPDATE_STATS',
-    matchCount: matches.length,
-    types: matches.map((m: PIIMatch) => m.type),
+    matchCount: currentMatches.length,
+    types: currentMatches.map((m: PIIMatch) => m.type),
   })
 }
 

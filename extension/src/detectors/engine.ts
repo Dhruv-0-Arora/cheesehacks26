@@ -62,7 +62,7 @@ export function analyzeText(
   return resolveOverlaps(allMatches)
 }
 
-function resolveOverlaps(matches: PIIMatch[]): PIIMatch[] {
+export function resolveOverlaps(matches: PIIMatch[]): PIIMatch[] {
   matches.sort((a, b) => {
     if (a.start !== b.start) return a.start - b.start
     if (a.score !== b.score) return b.score - a.score
@@ -87,4 +87,83 @@ function resolveOverlaps(matches: PIIMatch[]): PIIMatch[] {
   }
 
   return filtered
+}
+
+/**
+ * Request ML-based PII analysis from the background service worker.
+ * Falls back to empty array if the background is unreachable.
+ */
+function requestMLAnalysis(text: string): Promise<PIIMatch[]> {
+  return new Promise((resolve) => {
+    try {
+      const c = (globalThis as Record<string, unknown>).chrome as
+        | { runtime?: { id?: string; lastError?: unknown; sendMessage: (msg: unknown, cb: (res: unknown) => void) => void } }
+        | undefined
+      if (!c?.runtime?.id) {
+        resolve([])
+        return
+      }
+      c.runtime.sendMessage({ action: 'ML_ANALYZE', text }, (response) => {
+        const res = response as { matches?: PIIMatch[] } | undefined
+        if (c.runtime!.lastError || !res?.matches) {
+          resolve([])
+        } else {
+          resolve(res.matches)
+        }
+      })
+    } catch {
+      resolve([])
+    }
+  })
+}
+
+/**
+ * Merge ML matches into regex matches. Regex matches take priority:
+ * ML matches that overlap with any regex match are discarded.
+ * Non-overlapping ML matches are added as supplementary detections.
+ */
+function mergeMLIntoRegex(regexMatches: PIIMatch[], mlMatches: PIIMatch[]): PIIMatch[] {
+  if (mlMatches.length === 0) return regexMatches
+
+  const supplementary: PIIMatch[] = []
+  for (const ml of mlMatches) {
+    const overlaps = regexMatches.some(
+      (r) => ml.start < r.end && ml.end > r.start
+    )
+    if (!overlaps) {
+      supplementary.push(ml)
+    }
+  }
+
+  if (supplementary.length === 0) return regexMatches
+  return resolveOverlaps([...regexMatches, ...supplementary])
+}
+
+/**
+ * Async analysis: runs regex synchronously and ML in parallel.
+ * Returns regex matches immediately via the onRegexDone callback,
+ * then returns the merged result (regex + ML) when ML completes.
+ */
+export async function analyzeTextWithML(
+  text: string,
+  enabledTypes: PIIType[] | null = null,
+  customBlockList: string[] = [],
+  onRegexDone?: (matches: PIIMatch[]) => void,
+): Promise<PIIMatch[]> {
+  const regexMatches = analyzeText(text, enabledTypes, customBlockList)
+
+  if (onRegexDone) onRegexDone(regexMatches)
+
+  let mlMatches: PIIMatch[]
+  try {
+    mlMatches = await requestMLAnalysis(text)
+  } catch {
+    return regexMatches
+  }
+
+  if (enabledTypes) {
+    mlMatches = mlMatches.filter((m) => m.type === 'CUSTOM' || enabledTypes.includes(m.type))
+  }
+
+  return mergeMLIntoRegex(regexMatches, mlMatches)
 }

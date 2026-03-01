@@ -1,0 +1,5 @@
+# Python 3.12 + Arch Linux (NVIDIA CUDA 12 / RTX 3070)
+jax[cuda12]
+tensorflow[and-cuda]>=2.16
+numpy>=1.24
+faker>=22.0
