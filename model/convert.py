@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-MODEL_PATH = Path("/mnt/external/docs/fhegis/pii_ner.h5")
+MODEL_PATH = Path("/Volumes/wintermute/docs/fhegis/pii_ner.h5")
 DATA_DIR = Path(__file__).parent / "data"
 OUTPUT_DIR = Path(__file__).parent / "tfjs_model"
 EXTENSION_MODEL_DIR = Path(__file__).parent.parent / "extension" / "public" / "model"
