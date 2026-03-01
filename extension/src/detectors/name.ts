@@ -15,19 +15,23 @@ const PREFIXES_RAW = [
 const PREFIXES = PREFIXES_RAW.sort((a, b) => b.length - a.length).join('|')
 
 const GREETINGS = [
-  'Hi','Hello','Hey','Dear','Greetings',
+  'Hi','Hello','Hey','Dear','Greetings','Good morning','Good afternoon','Good evening',
   'Hola','Bonjour','Salut','Ciao','Olá',
-  'Hallo','Hej','Namaste',
-].join('|')
+  'Hallo','Hej','Namaste','Sup','Yo','What\'s up',
+].sort((a, b) => b.length - a.length).join('|')
 
 const INTRODUCTIONS = [
-  'my name is','i am','this is',
+  'my name is','i am','i\'m','this is','call me',
   'je m\'appelle','mon nom est','je suis',
   'ich heiße','mein name ist','ich bin',
-  'me llamo','mi nombre es',
+  'me llamo','mi nombre es','soy',
   'mi chiamo','il mio nome è',
-  'his name is','her name is','their name is','named','called',
+  'his name is','her name is','their name is','its name is',
+  'named','called','known as','goes by','referred to as',
   'first name','last name','nickname','surname',
+  'contact','sent by','from','signed','written by','authored by',
+  'regards','sincerely','best','cheers','thanks',
+  'attention','attn','to','cc','bcc',
 ].sort((a, b) => b.length - a.length).join('|')
 
 function toTitleCase(str: string): string {
@@ -39,7 +43,7 @@ function isCommon(word: string): boolean {
 }
 
 function isKnownFirstName(word: string): boolean {
-  return FIRST_NAMES.has(toTitleCase(word))
+  return FIRST_NAMES.has(toTitleCase(word)) || FIRST_NAMES.has(word)
 }
 
 function isKnownLastName(word: string): boolean {
@@ -50,82 +54,97 @@ function isKnownName(word: string): boolean {
   return isKnownFirstName(word) || isKnownLastName(word)
 }
 
+function looksLikeName(word: string): boolean {
+  if (word.length < 2 || word.length > 30) return false
+  if (/\d/.test(word)) return false
+  return /^[A-Z][a-zA-Z'-]+$/.test(word)
+}
+
 export class NameDetector extends ContextualDetector {
   constructor() {
     super()
 
-    // Prefix + capitalized word(s): "Mr. Smith", "Dr. John Doe"
+    // Title/prefix + capitalized word(s): "Mr. Smith", "Dr. John Doe"
     this.addRule({
       type: 'NAME',
-      score: 85,
+      score: 90,
       pattern: new RegExp(
-        `\\b(?!(?:${PREFIXES})\\b)[A-Z][a-zA-Z'-]+(?:\\s+(?!(?:${PREFIXES})\\b)[A-Z][a-zA-Z'-]+)*\\b`,
+        `\\b[A-Z][a-zA-Z'-]+(?:\\s+[A-Z][a-zA-Z'-]+)*\\b`,
         'g'
       ),
       contextBefore: new RegExp(`(?:${PREFIXES})\\s+$`, 'i'),
     })
 
-    // Composite names: 2+ capitalized words where at least one is a known name
+    // Introduction + any word(s): "my name is John", "I'm Sarah", "call me Dave"
+    // Strong context — accept any capitalized word, no need for name-list lookup
     this.addRule({
       type: 'NAME',
-      score: 80,
-      pattern: new RegExp(
-        `\\b(?!(?:${GREETINGS}|${INTRODUCTIONS}|${PREFIXES})\\b)[A-Z][a-zA-Z'-]+(?:\\s+(?!(?:${GREETINGS}|${INTRODUCTIONS}|${PREFIXES})\\b)[A-Z][a-zA-Z'-]+)+\\b`,
-        'gi'
-      ),
+      score: 88,
+      pattern: /\b[A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+)?\b/g,
+      contextBefore: new RegExp(`(?:${INTRODUCTIONS})[,:]?\\s+$`, 'i'),
       validator: (match) => {
         const words = match.split(/\s+/)
-        if (!words.some((w) => isKnownName(w))) return false
+        return words.every((w) => looksLikeName(w))
+      },
+    })
+
+    // Introduction + lowercase name: "my name is john" (people often don't capitalize)
+    this.addRule({
+      type: 'NAME',
+      score: 86,
+      pattern: /\b[a-zA-Z][a-zA-Z'-]+(?:\s+[a-zA-Z][a-zA-Z'-]+)?\b/g,
+      contextBefore: new RegExp(`(?:${INTRODUCTIONS})[,:]?\\s+$`, 'i'),
+      validator: (match) => {
+        const words = match.split(/\s+/)
         if (words.some((w) => isCommon(w) && !isKnownName(w))) return false
-        return true
+        return words.some((w) => isKnownName(w))
       },
     })
 
-    // Greeting + name: "Hello John", "Hi Sarah"
+    // Greeting + capitalized word: "Hi John", "Hello Sarah", "Hey Mike"
+    // Accept any capitalized word that isn't a common English word
+    this.addRule({
+      type: 'NAME',
+      score: 85,
+      pattern: /\b[A-Z][a-zA-Z'-]+\b/g,
+      contextBefore: new RegExp(`(?:${GREETINGS})[,!]?\\s+$`, 'i'),
+      validator: (match) => !isCommon(match) && looksLikeName(match),
+    })
+
+    // Two+ capitalised words where first is known first name and last is known last name: "John Smith"
     this.addRule({
       type: 'NAME',
       score: 82,
-      pattern: /\b[A-Z][a-zA-Z'-]+\b/g,
-      contextBefore: new RegExp(`(?:${GREETINGS})\\s+$`, 'i'),
+      pattern: /\b[A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+)+\b/g,
       validator: (match) => {
-        if (isCommon(match) && !isKnownName(match)) return false
-        return /^[A-Z]/.test(match)
+        const words = match.split(/\s+/)
+        if (words.length < 2 || words.length > 4) return false
+        if (words.some((w) => isCommon(w) && !isKnownName(w))) return false
+        const firstKnown = isKnownFirstName(words[0])
+        const lastKnown = isKnownLastName(words[words.length - 1])
+        return firstKnown && lastKnown
       },
     })
 
-    // Introduction + name: "my name is John"
+    // Two capitalised words where at least one is a known name: "Priya Patel", "Chen Wei"
     this.addRule({
       type: 'NAME',
-      score: 82,
-      pattern: /\b[A-Z][a-zA-Z'-]+\b/g,
-      contextBefore: new RegExp(`(?:${INTRODUCTIONS})\\s+$`, 'i'),
+      score: 79,
+      pattern: /\b[A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+)+\b/g,
       validator: (match) => {
-        if (isCommon(match) && !isKnownName(match)) return false
-        return /^[A-Z]/.test(match)
+        const words = match.split(/\s+/)
+        if (words.length < 2 || words.length > 4) return false
+        if (words.some((w) => isCommon(w) && !isKnownName(w))) return false
+        return words.some((w) => isKnownName(w))
       },
     })
 
-    // Standalone known first names (not common words)
+    // Standalone known first name (not a common word): "John", "Sarah"
     this.addRule({
       type: 'NAME',
       score: 78,
       pattern: /\b[A-Z][a-zA-Z'-]{1,30}\b/g,
-      validator: (word) => {
-        if (isCommon(word)) return false
-        return isKnownFirstName(word)
-      },
-    })
-
-    // Standalone known last names (not common words)
-    this.addRule({
-      type: 'NAME',
-      score: 75,
-      pattern: /\b[A-Z][a-zA-Z'-]{1,30}\b/g,
-      validator: (word) => {
-        if (isCommon(word)) return false
-        if (isKnownFirstName(word)) return false
-        return isKnownLastName(word)
-      },
+      validator: (word) => !isCommon(word) && isKnownFirstName(word),
     })
 
     // Username context: "username: john_doe"

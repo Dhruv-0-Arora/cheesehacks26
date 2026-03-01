@@ -1,5 +1,5 @@
 import type { PIIMatch, PIIType } from '../types.ts'
-// import { NameDetector } from './name.ts' // Disabled: Name matching falls back to NER to avoid FP loops.
+import { NameDetector } from './name.ts'
 import { EmailDetector } from './email.ts'
 import { PhoneDetector } from './phone.ts'
 import { FinancialDetector } from './financial.ts'
@@ -11,7 +11,7 @@ import { DateDetector } from './date.ts'
 import { ContextualDetector } from './base.ts'
 
 const detectorInstances = [
-  // new NameDetector(),
+  new NameDetector(),
   new EmailDetector(),
   new PhoneDetector(),
   new FinancialDetector(),

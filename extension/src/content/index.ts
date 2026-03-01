@@ -1,9 +1,9 @@
 import { detectSite } from './sites.ts'
 import { analyzeText } from '../detectors/engine.ts'
-import { createHighlightLayer, renderHighlights, cleanup, showTooltip, scheduleHide, setOnReplace, setReplaceCallback } from './highlighter.ts'
+import { createHighlightLayer, renderHighlights, cleanup, showTooltip, hideTooltip, scheduleHide, setOnReplace, setReplaceCallback, updateInspectPanelData, hideInspectPanel, resetActiveMode, clearHighlightsOnly } from './highlighter.ts'
 import { setCurrentMatches, setupInterceptor, setupResponseUnmasking } from './interceptor.ts'
 import { watchForInput, stopWatching } from './observer.ts'
-import { loadTokenMap, loadReplacementMap, getFakeReplacement, saveReplacementMap, saveTokenMap } from '../tokens/manager.ts'
+import { loadTokenMap, loadReplacementMap, getFakeReplacement, saveReplacementMap, saveTokenMap, getTokenMap, getReplacementMap, getTokenForMatch } from '../tokens/manager.ts'
 import type { PIIMatch, ExtensionSettings, PIIType } from '../types.ts'
 
 let enabled = true
@@ -14,6 +14,8 @@ let currentInputEl: HTMLElement | null = null
 let lastProcessedText = ''
 let currentMatches: PIIMatch[] = []
 let dead = false
+let storedOriginalText: string | null = null
+let storedMatches: PIIMatch[] = []
 
 const adapter = detectSite()
 
@@ -90,10 +92,17 @@ function processInput(el: HTMLElement) {
   if (text === lastProcessedText) return
   lastProcessedText = text
 
+  if (storedOriginalText !== null) {
+    storedOriginalText = null
+    storedMatches = []
+    resetActiveMode()
+  }
+
   if (!text.trim()) {
     renderHighlights('', [])
     setCurrentMatches([])
     currentMatches = []
+    updateInspectPanelData('', [], {}, {})
     return
   }
 
@@ -101,6 +110,7 @@ function processInput(el: HTMLElement) {
   currentMatches = matches
   renderHighlights(text, matches)
   setCurrentMatches(matches)
+  updateInspectPanelData(text, matches, getTokenMap(), getReplacementMap())
 
   safeSendMessage({
     action: 'UPDATE_STATS',
@@ -115,31 +125,37 @@ function debouncedProcess(el: HTMLElement) {
   debounceTimer = setTimeout(() => processInput(el), 200)
 }
 
-function replaceAll() {
-  if (!currentInputEl || currentMatches.length === 0) return
+function handleModeSwitch(mode: 'labels' | 'replaced') {
+  if (!currentInputEl) return
 
-  const text = adapter.getInputText(currentInputEl)
-  const sorted = [...currentMatches].sort((a, b) => b.start - a.start)
-
-  let result = text
-  for (const match of sorted) {
-    const fake = getFakeReplacement(match)
-    result = result.slice(0, match.start) + fake + result.slice(match.end)
+  if (storedOriginalText === null) {
+    storedOriginalText = getInputText(currentInputEl)
+    storedMatches = [...currentMatches]
   }
 
-  lastProcessedText = result
-  currentMatches = []
-  setCurrentMatches([])
-  renderHighlights('', [])
+  if (storedMatches.length === 0) return
 
+  const sorted = [...storedMatches].sort((a, b) => b.start - a.start)
+  let result = storedOriginalText
+  for (const match of sorted) {
+    if (mode === 'labels') {
+      result = result.slice(0, match.start) + getTokenForMatch(match) + result.slice(match.end)
+    } else {
+      result = result.slice(0, match.start) + getFakeReplacement(match) + result.slice(match.end)
+    }
+  }
+
+  clearHighlightsOnly()
+  lastProcessedText = result
   adapter.setInputText(currentInputEl, result)
+  saveTokenMap()
   saveReplacementMap()
 }
 
 function onInputFound(inputEl: HTMLElement) {
   if (dead) return
   currentInputEl = inputEl
-  setReplaceCallback(replaceAll)
+  setReplaceCallback(handleModeSwitch)
   createHighlightLayer(inputEl)
 
   inputEl.addEventListener('input', () => debouncedProcess(inputEl))
@@ -153,10 +169,13 @@ function onInputFound(inputEl: HTMLElement) {
 }
 
 function onInputLost(_el: HTMLElement) {
+  hideInspectPanel()
   cleanup()
   currentInputEl = null
   lastProcessedText = ''
   currentMatches = []
+  storedOriginalText = null
+  storedMatches = []
 }
 
 function init() {
@@ -189,12 +208,12 @@ function init() {
   document.addEventListener('mouseover', (e) => {
     if (dead) return
     const mark = (e.target as HTMLElement).closest?.('.pii-shield-mark') as HTMLElement | null
-    if (mark?.dataset.token && mark.dataset.type && mark.dataset.original) {
+    if (mark?.dataset.fakeValue && mark.dataset.type && mark.dataset.original) {
       showTooltip(
         e.clientX,
         e.clientY,
         mark.dataset.type as PIIType,
-        mark.dataset.token,
+        mark.dataset.fakeValue,
         mark.dataset.original
       )
     }

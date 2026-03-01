@@ -1,10 +1,13 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import HeroDemo from './components/HeroDemo'
 import './index.css'
-import App from './App.tsx'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+const demoEl = document.getElementById('hero-demo')
+if (demoEl) {
+  createRoot(demoEl).render(
+    <StrictMode>
+      <HeroDemo />
+    </StrictMode>,
+  )
+}

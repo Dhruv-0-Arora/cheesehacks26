@@ -7,10 +7,15 @@
     "module": "ESNext",
     "types": ["vite/client"],
     "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@extension/*": ["../extension/src/*"]
+    },
 
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,

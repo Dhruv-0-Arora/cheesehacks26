@@ -1,18 +1,16 @@
-* {
+/* Only reset elements inside the popup/demo root */
+.pii-shield-root *,
+body.pii-shield-root * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-html {
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-body {
-  width: 380px;
+.pii-shield-root,
+body.pii-shield-root {
+  width: 420px;
   min-height: 200px;
-  max-height: 560px;
+  max-height: 600px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 13px;
   color: #2e3440;
@@ -33,19 +31,22 @@ body {
   border-radius: 12px;
 }
 
-body::-webkit-scrollbar {
+.pii-shield-root::-webkit-scrollbar,
+body.pii-shield-root::-webkit-scrollbar {
   width: 6px;
 }
-body::-webkit-scrollbar-track {
+.pii-shield-root::-webkit-scrollbar-track,
+body.pii-shield-root::-webkit-scrollbar-track {
   background: transparent;
 }
-body::-webkit-scrollbar-thumb {
+.pii-shield-root::-webkit-scrollbar-thumb,
+body.pii-shield-root::-webkit-scrollbar-thumb {
   background: rgba(46, 52, 64, 0.25);
   border-radius: 3px;
 }
 
 .popup-container {
-  padding: 16px;
+  padding: 20px;
   background: rgba(236, 239, 244, 0.25);
   backdrop-filter: blur(20px) saturate(1.3);
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
@@ -53,12 +54,18 @@ body::-webkit-scrollbar-thumb {
   border-radius: 12px;
 }
 
+.pii-shield-embedded .popup-container {
+  min-height: auto;
+}
+
+/* --- Header --- */
+
 .popup-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
   border-bottom: 1px solid rgba(46, 52, 64, 0.1);
 }
 
@@ -69,7 +76,7 @@ body::-webkit-scrollbar-thumb {
 }
 
 .logo-row h1 {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: #2e3440;
 }
@@ -81,6 +88,7 @@ body::-webkit-scrollbar-thumb {
   cursor: pointer;
   font-size: 12px;
   color: #3b4252;
+  font-weight: 500;
 }
 
 .toggle {
@@ -115,16 +123,83 @@ body::-webkit-scrollbar-thumb {
   transform: translateX(18px);
 }
 
-/* --- Sections: glass cards --- */
+/* --- Status bar --- */
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: rgba(236, 239, 244, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(76, 86, 106, 0.4);
+  flex-shrink: 0;
+}
+
+.status-dot.active {
+  background: #a3be8c;
+  box-shadow: 0 0 6px rgba(163, 190, 140, 0.5);
+}
+
+.status-text {
+  font-size: 12px;
+  color: #4c566a;
+}
+
+/* --- Stats chips --- */
+
+.stats-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.stat-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(236, 239, 244, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  font-size: 12px;
+}
+
+.stat-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.stat-count {
+  font-weight: 700;
+  color: #2e3440;
+}
+
+.stat-label {
+  color: #4c566a;
+}
+
+/* --- Sections --- */
 
 .section {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   background: rgba(236, 239, 244, 0.35);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.45);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 14px 16px;
   box-shadow: 0 2px 12px rgba(46, 52, 64, 0.06);
 }
 
@@ -137,65 +212,100 @@ body::-webkit-scrollbar-thumb {
   margin-bottom: 8px;
 }
 
-/* --- Stats --- */
-
-.stats-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.section-hint {
+  font-size: 11px;
+  color: rgba(76, 86, 106, 0.6);
+  margin-bottom: 10px;
+  line-height: 1.4;
 }
 
-.stat-chip {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: rgba(163, 190, 140, 0.18);
-  border: 1px solid rgba(163, 190, 140, 0.3);
-  font-size: 12px;
-}
+/* --- Mapping / Token lists --- */
 
-.stat-count {
-  font-weight: 700;
-  color: #a3be8c;
-}
-
-.stat-label {
-  color: #3b4252;
-}
-
-/* --- Token Mappings --- */
-
-.token-list {
-  max-height: 120px;
+.mapping-list {
+  max-height: 180px;
   overflow-y: auto;
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 8px;
-  padding: 4px;
+  padding: 6px;
   background: rgba(236, 239, 244, 0.2);
 }
 
-.token-list::-webkit-scrollbar {
+.mapping-list::-webkit-scrollbar {
   width: 4px;
 }
-.token-list::-webkit-scrollbar-thumb {
+.mapping-list::-webkit-scrollbar-thumb {
   background: rgba(46, 52, 64, 0.2);
   border-radius: 2px;
 }
+
+.mapping-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.mapping-row:hover {
+  background: rgba(236, 239, 244, 0.25);
+}
+
+.mapping-type {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border: 1px solid;
+  border-radius: 4px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.mapping-original {
+  color: #3b4252;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 11px;
+}
+
+.mapping-arrow {
+  color: rgba(76, 86, 106, 0.35);
+  flex-shrink: 0;
+}
+
+.mapping-fake {
+  color: #2e3440;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 11px;
+}
+
+/* --- Token rows --- */
 
 .token-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 6px;
+  padding: 6px 8px;
   font-size: 12px;
   border-radius: 6px;
   transition: background 0.15s;
 }
 
 .token-row:hover {
-  background: rgba(180, 142, 173, 0.1);
+  background: rgba(180, 142, 173, 0.08);
 }
 
 .token-key {
@@ -204,13 +314,15 @@ body::-webkit-scrollbar-thumb {
   color: #b48ead;
   background: rgba(180, 142, 173, 0.12);
   border: 1px solid rgba(180, 142, 173, 0.2);
-  padding: 2px 6px;
+  padding: 2px 8px;
   border-radius: 5px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .token-arrow {
   color: rgba(76, 86, 106, 0.4);
+  flex-shrink: 0;
 }
 
 .token-value {
@@ -218,6 +330,36 @@ body::-webkit-scrollbar-thumb {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12px;
+  min-width: 0;
+}
+
+/* --- Settings toggle --- */
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: rgba(236, 239, 244, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  color: #4c566a;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.settings-toggle:hover {
+  background: rgba(236, 239, 244, 0.4);
+}
+
+.settings-toggle-icon {
+  font-size: 10px;
+  color: #4c566a;
 }
 
 /* --- Detection Type Grid --- */
@@ -231,8 +373,8 @@ body::-webkit-scrollbar-thumb {
 .type-check {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 7px;
+  gap: 7px;
+  padding: 6px 8px;
   border-radius: 6px;
   font-size: 12px;
   cursor: pointer;
@@ -260,7 +402,7 @@ body::-webkit-scrollbar-thumb {
 
 .custom-input-row input {
   flex: 1;
-  padding: 7px 10px;
+  padding: 8px 12px;
   border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 8px;
   font-size: 12px;
@@ -281,7 +423,7 @@ body::-webkit-scrollbar-thumb {
 }
 
 .custom-input-row button {
-  padding: 7px 16px;
+  padding: 8px 16px;
   border: 1px solid rgba(208, 135, 112, 0.35);
   border-radius: 8px;
   background: rgba(208, 135, 112, 0.2);
@@ -311,7 +453,7 @@ body::-webkit-scrollbar-thumb {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-radius: 20px;
   background: rgba(191, 97, 106, 0.14);
   border: 1px solid rgba(191, 97, 106, 0.25);

@@ -1,6 +1,13 @@
 import type { PIIMatch, PIIType, TokenMap, TokenizeResult } from '../types.ts'
 import { generateFake } from './fake-data.ts'
 
+/** Access chrome APIs in a way that type-checks in both extension and web (no global chrome type required). */
+function getChrome(): { storage?: { session?: { get: (keys: string[], cb: (r: Record<string, unknown>) => void) => void; set: (obj: object, cb?: () => void) => void } }; runtime?: { lastError?: unknown } } | undefined {
+  return typeof globalThis !== 'undefined'
+    ? (globalThis as unknown as { chrome?: { storage?: { session?: { get: (k: string[], cb: (r: Record<string, unknown>) => void) => void; set: (o: object, cb?: () => void) => void }; runtime?: { lastError?: unknown } } } }).chrome
+    : undefined
+}
+
 // Replacement map: "${type}:${original}" → fake value
 // Persisted in session storage so the same PII always gets the same fake across queries.
 let replacementMap: Record<string, string> = {}
@@ -22,11 +29,13 @@ export function setReplacementMap(map: Record<string, string>) {
 }
 
 export async function loadReplacementMap(): Promise<Record<string, string>> {
-  if (!isContextValid()) return getReplacementMap()
+  const chrome = getChrome()
+  const session = chrome?.storage?.session
+  if (!isContextValid() || !session) return getReplacementMap()
   return new Promise((resolve) => {
     try {
-      chrome.storage.session.get('replacementMap', (result) => {
-        if (chrome.runtime.lastError) {
+      session.get(['replacementMap'], (result: Record<string, unknown>) => {
+        if (chrome?.runtime?.lastError) {
           resolve(getReplacementMap())
           return
         }
@@ -40,11 +49,13 @@ export async function loadReplacementMap(): Promise<Record<string, string>> {
 }
 
 export async function saveReplacementMap(): Promise<void> {
-  if (!isContextValid()) return
+  const chrome = getChrome()
+  const session = chrome?.storage?.session
+  if (!isContextValid() || !session) return
   return new Promise((resolve) => {
     try {
-      chrome.storage.session.set({ replacementMap }, () => {
-        if (chrome.runtime.lastError) { /* ignore */ }
+      session.set({ replacementMap }, () => {
+        if (chrome?.runtime?.lastError) { /* ignore */ }
         resolve()
       })
     } catch {
@@ -75,7 +86,8 @@ let tokenMap: TokenMap = {}
 
 function isContextValid(): boolean {
   try {
-    return !!(typeof chrome !== 'undefined' && chrome.runtime?.id)
+    const chrome = getChrome()
+    return !!(chrome?.runtime && 'id' in chrome.runtime)
   } catch {
     return false
   }
@@ -152,11 +164,13 @@ export function getTokenForMatch(match: PIIMatch): string {
 }
 
 export async function loadTokenMap(): Promise<TokenMap> {
-  if (!isContextValid()) return getTokenMap()
+  const chrome = getChrome()
+  const session = chrome?.storage?.session
+  if (!isContextValid() || !session) return getTokenMap()
   return new Promise((resolve) => {
     try {
-      chrome.storage.session.get('tokenMap', (result) => {
-        if (chrome.runtime.lastError) {
+      session.get(['tokenMap'], (result: Record<string, unknown>) => {
+        if (chrome?.runtime?.lastError) {
           resolve(getTokenMap())
           return
         }
@@ -172,11 +186,13 @@ export async function loadTokenMap(): Promise<TokenMap> {
 }
 
 export async function saveTokenMap(): Promise<void> {
-  if (!isContextValid()) return
+  const chrome = getChrome()
+  const session = chrome?.storage?.session
+  if (!isContextValid() || !session) return
   return new Promise((resolve) => {
     try {
-      chrome.storage.session.set({ tokenMap }, () => {
-        if (chrome.runtime.lastError) { /* ignore */ }
+      session.set({ tokenMap }, () => {
+        if (chrome?.runtime?.lastError) { /* ignore */ }
         resolve()
       })
     } catch {
