@@ -63,8 +63,8 @@ function getInputText(el: HTMLElement): string {
 
 function syncReplacements() {
   const replacements = currentMatches.map(m => {
-    // 'labels' (redacted) → send tokens like [address_1]; otherwise → send fake random values
-    const useTokens = activeMode === 'labels';
+    // Auto-replace mode always uses tokens; manual mode respects user's choice
+    const useTokens = autoReplace || activeMode === 'labels';
     return { original: m.text, fake: useTokens ? getTokenForMatch(m) : getFakeReplacement(m) };
   });
   window.postMessage({
