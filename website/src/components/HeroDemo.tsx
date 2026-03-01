@@ -9,33 +9,33 @@ const DEFAULT_ENABLED_TYPES: PIIType[] = [
 ]
 
 const TYPE_BORDER: Record<PIIType, string> = {
-  NAME: '#5e81ac',
-  EMAIL: '#ebcb8b',
-  PHONE: '#b48ead',
-  FINANCIAL: '#bf616a',
-  SSN: '#bf616a',
-  ID: '#d08770',
-  ADDRESS: '#8fbcbb',
-  SECRET: '#bf616a',
-  URL: '#81a1c1',
-  DATE: '#a3be8c',
-  CUSTOM: '#d08770',
-  PATH: '#10b981',
+  NAME: '#5E81AC',
+  EMAIL: '#EBCB8B',
+  PHONE: '#B48EAD',
+  FINANCIAL: '#BF616A',
+  SSN: '#BF616A',
+  ID: '#D08770',
+  ADDRESS: '#8FBCBB',
+  SECRET: '#BF616A',
+  URL: '#81A1C1',
+  DATE: '#A3BE8C',
+  CUSTOM: '#D08770',
+  PATH: '#A3BE8C',
 }
 
 const TYPE_BG: Record<PIIType, string> = {
-  NAME: 'rgba(94,129,172,0.14)',
-  EMAIL: 'rgba(235,203,139,0.14)',
-  PHONE: 'rgba(180,142,173,0.14)',
-  FINANCIAL: 'rgba(191,97,106,0.16)',
-  SSN: 'rgba(191,97,106,0.16)',
-  ID: 'rgba(208,135,112,0.14)',
-  ADDRESS: 'rgba(143,188,187,0.14)',
-  SECRET: 'rgba(191,97,106,0.18)',
-  URL: 'rgba(129,161,193,0.14)',
-  DATE: 'rgba(163,190,140,0.14)',
-  CUSTOM: 'rgba(208,135,112,0.14)',
-  PATH: 'rgba(16,185,129,0.12)',
+  NAME: 'rgba(94,129,172,0.22)',
+  EMAIL: 'rgba(235,203,139,0.22)',
+  PHONE: 'rgba(180,142,173,0.22)',
+  FINANCIAL: 'rgba(191,97,106,0.22)',
+  SSN: 'rgba(191,97,106,0.22)',
+  ID: 'rgba(208,135,112,0.22)',
+  ADDRESS: 'rgba(143,188,187,0.22)',
+  SECRET: 'rgba(191,97,106,0.25)',
+  URL: 'rgba(129,161,193,0.22)',
+  DATE: 'rgba(163,190,140,0.22)',
+  CUSTOM: 'rgba(208,135,112,0.22)',
+  PATH: 'rgba(163,190,140,0.20)',
 }
 
 const PLACEHOLDER = 'Try typing: "Hi John, email me at john@example.com or call 555-123-4567. My SSN is 123-45-6789."'
@@ -63,8 +63,8 @@ function HighlightedText({ text, matches }: { text: string; matches: PIIMatch[] 
             key={i}
             className="rounded px-0.5 border-b-2"
             style={{
-              background: TYPE_BG[p.type] ?? 'rgba(129,161,193,0.14)',
-              borderBottomColor: TYPE_BORDER[p.type] ?? '#81a1c1',
+              background: TYPE_BG[p.type] ?? 'rgba(129,161,193,0.22)',
+              borderBottomColor: TYPE_BORDER[p.type] ?? '#81A1C1',
               color: 'inherit',
             }}
             title={p.type}
@@ -87,17 +87,19 @@ export default function HeroDemo() {
   const [input, setInput] = useState('')
   const [redactMode, setRedactMode] = useState<'labels' | 'replaced'>('labels')
 
-  const { matches, maskedText, replacedText, hasPII, error, mappings } = useMemo(() => {
+  const { matches, maskedText, maskedMatches, replacedText, replacedMatches, hasPII, error, mappings } = useMemo(() => {
     const trimmed = input.trim()
-    if (!trimmed)
-      return {
-        matches: [] as PIIMatch[],
-        maskedText: '',
-        replacedText: '',
-        hasPII: false,
-        error: null as string | null,
-        mappings: [] as MappingEntry[],
-      }
+    const empty = {
+      matches: [] as PIIMatch[],
+      maskedText: '',
+      maskedMatches: [] as PIIMatch[],
+      replacedText: '',
+      replacedMatches: [] as PIIMatch[],
+      hasPII: false,
+      error: null as string | null,
+      mappings: [] as MappingEntry[],
+    }
+    if (!trimmed) return empty
     try {
       clearTokens()
       const m = analyzeText(trimmed, DEFAULT_ENABLED_TYPES, [])
@@ -115,44 +117,57 @@ export default function HeroDemo() {
         mappings.push({ type: match.type, original: match.text, fake })
       }
 
-      let replaced = ''
-      let idx = 0
+      const tokenMap = result.tokenMap
+      const maskedMatches: PIIMatch[] = []
+      let mIdx = 0
+      let mPos = 0
       for (const match of m) {
-        replaced += trimmed.substring(idx, match.start)
-        replaced += fakeMap.get(`${match.type}:${match.text}`) ?? match.text
-        idx = match.end
+        const before = trimmed.substring(mIdx, match.start)
+        mPos += before.length
+        const tokenKey = Object.entries(tokenMap).find(([, v]) => v === match.text)?.[0] ?? match.text
+        const newStart = mPos
+        mPos += tokenKey.length
+        maskedMatches.push({ text: tokenKey, type: match.type, start: newStart, end: mPos, score: match.score })
+        mIdx = match.end
       }
-      replaced += trimmed.substring(idx)
+
+      let replaced = ''
+      const replacedMatches: PIIMatch[] = []
+      let rIdx = 0
+      for (const match of m) {
+        replaced += trimmed.substring(rIdx, match.start)
+        const fake = fakeMap.get(`${match.type}:${match.text}`) ?? match.text
+        const newStart = replaced.length
+        replaced += fake
+        replacedMatches.push({ text: fake, type: match.type, start: newStart, end: replaced.length, score: match.score })
+        rIdx = match.end
+      }
+      replaced += trimmed.substring(rIdx)
 
       return {
         matches: m,
         maskedText: result.maskedText,
+        maskedMatches,
         replacedText: replaced,
+        replacedMatches,
         hasPII: m.length > 0,
         error: null,
         mappings,
       }
     } catch (e) {
-      return {
-        matches: [] as PIIMatch[],
-        maskedText: '',
-        replacedText: '',
-        hasPII: false,
-        error: e instanceof Error ? e.message : 'Detection failed',
-        mappings: [] as MappingEntry[],
-      }
+      return { ...empty, error: e instanceof Error ? e.message : 'Detection failed' }
     }
   }, [input])
 
   return (
     <div className="space-y-4 text-left select-text" style={{ pointerEvents: 'auto' }}>
       <div className="relative">
-        <label htmlFor="hero-demo-input" className="block text-xs font-mono text-gray-500 uppercase tracking-wider mb-2">
+        <label htmlFor="hero-demo-input" className="block text-xs font-mono text-[#81A1C1] uppercase tracking-wider mb-2">
           Type here — PII is detected in real time
         </label>
         <textarea
           id="hero-demo-input"
-          className="w-full min-h-[100px] p-4 rounded-lg bg-black/50 border border-[#333] text-gray-200 placeholder-gray-500 font-mono text-sm resize-y focus:border-[var(--accent-color)] focus:ring-1 focus:ring-[var(--accent-color)] outline-none transition-colors relative z-[1] select-text"
+          className="w-full min-h-[100px] p-4 rounded-lg bg-[#2E3440] border border-[#434C5E] text-[#ECEFF4] placeholder-[#4C566A] font-mono text-sm resize-y focus:border-[#88C0D0] focus:ring-1 focus:ring-[#88C0D0] outline-none transition-colors relative z-[1] select-text"
           placeholder={PLACEHOLDER}
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -164,33 +179,33 @@ export default function HeroDemo() {
 
       {input.trim() && (
         <>
-          <div className="rounded-lg border border-[#333] bg-black/50 p-4">
-            <div className="text-xs font-mono text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+          <div className="rounded-lg border border-[#434C5E] bg-[#2E3440] p-4">
+            <div className="text-xs font-mono text-[#81A1C1] uppercase tracking-wider mb-2 flex items-center gap-2">
               <span>Live detection</span>
               {hasPII && (
-                <span className="text-red-400 font-semibold">
+                <span className="text-[#BF616A] font-semibold">
                   {matches.length} PII item{matches.length !== 1 ? 's' : ''} found
                 </span>
               )}
             </div>
-            <p className="font-mono text-sm text-gray-300 whitespace-pre-wrap break-words leading-relaxed">
+            <p className="font-mono text-sm text-[#D8DEE9] whitespace-pre-wrap break-words leading-relaxed">
               <HighlightedText text={input.trim()} matches={matches} />
             </p>
           </div>
 
           {hasPII && (
-            <div className="rounded-lg border border-[var(--accent-color)]/30 bg-black/50 p-4">
-              <div className="text-xs font-mono text-[var(--accent-color)] uppercase tracking-wider mb-2 flex items-center justify-between">
+            <div className="rounded-lg border border-[#88C0D0]/30 bg-[#2E3440] p-4">
+              <div className="text-xs font-mono text-[#88C0D0] uppercase tracking-wider mb-2 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-full bg-[var(--accent-color)]" />
+                  <span className="inline-block w-2 h-2 rounded-full bg-[#88C0D0]" />
                   Safe to send
                 </div>
-                <div className="flex bg-white/5 rounded-md p-0.5 gap-0.5">
+                <div className="flex bg-[#3B4252] rounded-md p-0.5 gap-0.5">
                   <button
                     className={`px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wider transition-all ${
                       redactMode === 'labels'
-                        ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)]'
-                        : 'text-gray-500 hover:text-gray-300'
+                        ? 'bg-[#88C0D0]/20 text-[#88C0D0]'
+                        : 'text-[#4C566A] hover:text-[#D8DEE9]'
                     }`}
                     onClick={() => setRedactMode('labels')}
                   >
@@ -199,8 +214,8 @@ export default function HeroDemo() {
                   <button
                     className={`px-2.5 py-1 rounded text-[10px] font-semibold uppercase tracking-wider transition-all ${
                       redactMode === 'replaced'
-                        ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)]'
-                        : 'text-gray-500 hover:text-gray-300'
+                        ? 'bg-[#88C0D0]/20 text-[#88C0D0]'
+                        : 'text-[#4C566A] hover:text-[#D8DEE9]'
                     }`}
                     onClick={() => setRedactMode('replaced')}
                   >
@@ -208,18 +223,21 @@ export default function HeroDemo() {
                   </button>
                 </div>
               </div>
-              <p className="font-mono text-sm text-gray-300 whitespace-pre-wrap break-words leading-relaxed">
-                {redactMode === 'labels' ? maskedText : replacedText}
+              <p className="font-mono text-sm text-[#D8DEE9] whitespace-pre-wrap break-words leading-relaxed">
+                <HighlightedText
+                  text={redactMode === 'labels' ? maskedText : replacedText}
+                  matches={redactMode === 'labels' ? maskedMatches : replacedMatches}
+                />
               </p>
             </div>
           )}
 
           {mappings.length > 0 && (
-            <div className="rounded-lg border border-[#333] bg-black/50 p-4">
-              <div className="text-xs font-mono text-gray-500 uppercase tracking-wider mb-1">
+            <div className="rounded-lg border border-[#434C5E] bg-[#2E3440] p-4">
+              <div className="text-xs font-mono text-[#81A1C1] uppercase tracking-wider mb-1">
                 Replacement Map
               </div>
-              <p className="text-[11px] text-gray-600 mb-3">Same value always maps to the same replacement.</p>
+              <p className="text-[11px] text-[#4C566A] mb-3">Same value always maps to the same replacement.</p>
               <div className="space-y-1.5">
                 {mappings.map(({ type, original, fake }) => (
                   <div key={`${type}:${original}`} className="flex items-center gap-2 text-xs font-mono">
@@ -229,9 +247,9 @@ export default function HeroDemo() {
                     >
                       {type}
                     </span>
-                    <span className="text-gray-400 truncate flex-1">{original}</span>
-                    <span className="text-gray-600 flex-shrink-0">&rarr;</span>
-                    <span className="text-gray-200 font-semibold truncate flex-1">{fake}</span>
+                    <span className="text-[#D8DEE9] truncate flex-1 opacity-75">{original}</span>
+                    <span className="text-[#4C566A] flex-shrink-0">&rarr;</span>
+                    <span className="text-[#ECEFF4] font-semibold truncate flex-1">{fake}</span>
                   </div>
                 ))}
               </div>
@@ -241,11 +259,11 @@ export default function HeroDemo() {
       )}
 
       {error && (
-        <p className="text-red-400 text-sm font-mono" role="alert">{error}</p>
+        <p className="text-[#BF616A] text-sm font-mono" role="alert">{error}</p>
       )}
 
       {!input.trim() && !error && (
-        <p className="text-gray-500 text-sm font-mono">
+        <p className="text-[#4C566A] text-sm font-mono">
           Type or paste text above. Names, emails, phones, SSNs, API keys, and more will be highlighted and redacted.
         </p>
       )}

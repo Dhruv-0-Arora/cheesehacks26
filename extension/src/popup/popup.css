@@ -10,7 +10,6 @@ body.pii-shield-root * {
 .pii-shield-root,
 body.pii-shield-root {
   width: 340px;
-  min-height: 200px;
   max-height: 520px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 13px;
@@ -37,7 +36,6 @@ body.pii-shield-root::-webkit-scrollbar-thumb {
 .popup-container {
   padding: 20px;
   background: #2E3440;
-  min-height: 100vh;
   border-radius: 12px;
 }
 
@@ -135,14 +133,14 @@ body.pii-shield-root::-webkit-scrollbar-thumb {
 .type-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px;
+  gap: 6px;
 }
 
 .type-check {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 8px;
+  gap: 8px;
+  padding: 8px 10px;
   border-radius: 6px;
   font-size: 12px;
   cursor: pointer;

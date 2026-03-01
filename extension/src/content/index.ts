@@ -1,6 +1,6 @@
 import { detectSite } from './sites.ts'
 import { analyzeText } from '../detectors/engine.ts'
-import { createHighlightLayer, renderHighlights, cleanup, showTooltip, scheduleHide, setReplaceCallback, updateInspectPanelData, hideInspectPanel, resetActiveMode, clearHighlightsOnly } from './highlighter.ts'
+import { createHighlightLayer, renderHighlights, cleanup, showTooltip, scheduleHide, setReplaceCallback, updateInspectPanelData, hideInspectPanel, resetActiveMode } from './highlighter.ts'
 import { setCurrentMatches, setupInterceptor, setupResponseUnmasking } from './interceptor.ts'
 import { watchForInput, stopWatching } from './observer.ts'
 import { loadTokenMap, loadReplacementMap, getFakeReplacement, saveReplacementMap, saveTokenMap, getTokenMap, getReplacementMap, getTokenForMatch, getKnownFakeValues } from '../tokens/manager.ts'
@@ -134,21 +134,32 @@ function handleModeSwitch(mode: 'original' | 'labels' | 'replaced') {
 
   if (storedMatches.length === 0) return
 
-  const sorted = [...storedMatches].sort((a, b) => b.start - a.start)
-  let result = storedOriginalText
-  for (const match of sorted) {
-    if (mode === 'labels') {
-      result = result.slice(0, match.start) + getTokenForMatch(match) + result.slice(match.end)
-    } else {
-      result = result.slice(0, match.start) + getFakeReplacement(match) + result.slice(match.end)
-    }
-  }
+  const forwardSorted = [...storedMatches].sort((a, b) => a.start - b.start)
+  let result = ''
+  let lastEnd = 0
+  const highlightMatches: PIIMatch[] = []
 
-  clearHighlightsOnly()
+  for (const match of forwardSorted) {
+    result += storedOriginalText.slice(lastEnd, match.start)
+    const replacement = mode === 'labels' ? getTokenForMatch(match) : getFakeReplacement(match)
+    const newStart = result.length
+    result += replacement
+    highlightMatches.push({
+      text: replacement,
+      type: match.type,
+      start: newStart,
+      end: result.length,
+      score: match.score,
+    })
+    lastEnd = match.end
+  }
+  result += storedOriginalText.slice(lastEnd)
+
   currentMatches = []
   setCurrentMatches([])
   lastProcessedText = result
   adapter.setInputText(currentInputEl, result)
+  renderHighlights(result, highlightMatches)
   saveTokenMap()
   saveReplacementMap()
 }
