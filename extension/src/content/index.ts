@@ -1,7 +1,7 @@
 import { detectSite } from './sites.ts'
 import { analyzeText } from '../detectors/engine.ts'
-import { createHighlightLayer, renderHighlights, cleanup, showTooltip, scheduleHide, setReplaceCallback, updateInspectPanelData, hideInspectPanel, resetActiveMode, hideTooltip, hideBadge } from './highlighter.ts'
-import { setCurrentMatches, setFileBlocked, setupInterceptor, setupResponseUnmasking } from './interceptor.ts'
+import { createHighlightLayer, renderHighlights, cleanup, showTooltip, scheduleHide, setReplaceCallback, updateInspectPanelData, hideInspectPanel, resetActiveMode, hideTooltip, hideBadge, getState, cleanupAllUI } from './highlighter.ts'
+import { setCurrentMatches, setFileBlocked, setupInterceptor, setupResponseUnmasking, reapplyUnmasking } from './interceptor.ts'
 import { watchForInput, stopWatching } from './observer.ts'
 import { loadTokenMap, loadReplacementMap, getFakeReplacement, saveReplacementMap, saveTokenMap, getTokenMap, getReplacementMap, getTokenForMatch, getKnownFakeValues } from '../tokens/manager.ts'
 import { setupFileHandler, updateFileHandlerSettings, type FileDetectionResult } from './file-handler.ts'
@@ -10,10 +10,12 @@ import type { PIIMatch, ExtensionSettings, PIIType } from '../types.ts'
 
 let enabled = true
 let autoReplace = false
+let activeMode: 'original' | 'labels' | 'replaced' = 'replaced'
 let enabledTypes: PIIType[] = ['NAME', 'EMAIL', 'PHONE', 'FINANCIAL', 'SSN', 'ID', 'ADDRESS', 'SECRET', 'URL', 'DATE', 'PATH']
 let customBlockList: string[] = []
 let ignoredTokens = new Set<string>()
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let syncTimer: ReturnType<typeof setInterval> | null = null
 let currentInputEl: HTMLElement | null = null
 let lastProcessedText = ''
 let currentMatches: PIIMatch[] = []
@@ -53,6 +55,7 @@ function gracefulShutdown() {
   cleanup()
   stopWatching()
   if (debounceTimer) clearTimeout(debounceTimer)
+  if (syncTimer) clearInterval(syncTimer)
   currentInputEl = null
 }
 
@@ -65,7 +68,9 @@ function getInputText(el: HTMLElement): string {
 
 function syncReplacements() {
   const replacements = currentMatches.map(m => {
-    return { original: m.text, fake: autoReplace ? getTokenForMatch(m) : getFakeReplacement(m) };
+    // Auto-replace mode always uses tokens; manual mode respects user's choice
+    const useTokens = autoReplace || activeMode === 'labels';
+    return { original: m.text, fake: useTokens ? getTokenForMatch(m) : getFakeReplacement(m) };
   });
   window.postMessage({
     source: 'PII_SHIELD_EXT',
@@ -73,7 +78,42 @@ function syncReplacements() {
     autoReplace,
     replacements
   }, '*');
-  if (autoReplace) saveTokenMap();
+  saveTokenMap();
+  saveReplacementMap();
+}
+
+/**
+ * Strip PII-shield highlight wrappers from the input element so they
+ * don't bleed into the chat history when the message is committed.
+ */
+function stripHighlightWrappersFromInput() {
+  if (!currentInputEl) return
+  // The highlight marks live in the overlay, not the actual input, so they
+  // shouldn't be in the input DOM.  But for contenteditable elements, the
+  // site may copy inner HTML. Defensively remove any .pii-shield-mark or
+  // .pii-shield-unmasked spans that somehow ended up inside the input.
+  const marks = currentInputEl.querySelectorAll('.pii-shield-mark, .pii-shield-unmasked, .pii-shield-highlight-layer')
+  marks.forEach(mark => {
+    const parent = mark.parentNode
+    if (!parent) return
+    // Replace the mark element with its text content
+    const text = document.createTextNode(mark.textContent || '')
+    parent.replaceChild(text, mark)
+  })
+}
+
+/**
+ * Full cleanup on message send: strip DOM wrappers, hide all UI, reset state.
+ */
+function cleanupOnSend() {
+  stripHighlightWrappersFromInput()
+  cleanupAllUI()
+  currentMatches = []
+  setCurrentMatches([], autoReplace)
+  storedOriginalText = null
+  storedMatches = []
+  lastProcessedText = ''
+  resetActiveMode()
 }
 
 
@@ -85,24 +125,33 @@ function processInput(el: HTMLElement) {
   if (text === lastProcessedText) return
 
   if (storedOriginalText !== null) {
-    const replacedText = lastProcessedText
-    let restoredText: string
-
-    if (text.length > replacedText.length && text.startsWith(replacedText)) {
-      restoredText = storedOriginalText + text.slice(replacedText.length)
-    } else if (text.length > replacedText.length && text.endsWith(replacedText)) {
-      restoredText = text.slice(0, text.length - replacedText.length) + storedOriginalText
+    // If the input was cleared (empty) or shrunk, the site cleared it after send.
+    // Do NOT restore the original text — just clean up stored state.
+    if (!text.trim() || text.length < lastProcessedText.length * 0.5) {
+      storedOriginalText = null
+      storedMatches = []
+      resetActiveMode()
+      lastProcessedText = text
     } else {
-      restoredText = storedOriginalText
+      const replacedText = lastProcessedText
+      let restoredText: string
+
+      if (text.length > replacedText.length && text.startsWith(replacedText)) {
+        restoredText = storedOriginalText + text.slice(replacedText.length)
+      } else if (text.length > replacedText.length && text.endsWith(replacedText)) {
+        restoredText = text.slice(0, text.length - replacedText.length) + storedOriginalText
+      } else {
+        restoredText = storedOriginalText
+      }
+
+      storedOriginalText = null
+      storedMatches = []
+      resetActiveMode()
+
+      text = restoredText
+      lastProcessedText = text
+      adapter.setInputText(el, text)
     }
-
-    storedOriginalText = null
-    storedMatches = []
-    resetActiveMode()
-
-    text = restoredText
-    lastProcessedText = text
-    adapter.setInputText(el, text)
   } else {
     lastProcessedText = text
   }
@@ -140,6 +189,7 @@ function debouncedProcess(el: HTMLElement) {
 
 function handleModeSwitch(mode: 'original' | 'labels' | 'replaced') {
   if (!currentInputEl) return
+  activeMode = mode
 
   if (storedOriginalText === null) {
     storedOriginalText = getInputText(currentInputEl)
@@ -198,50 +248,6 @@ function handleModeSwitch(mode: 'original' | 'labels' | 'replaced') {
   saveReplacementMap()
 }
 
-function getCaretCharOffset(el: HTMLElement): number {
-  const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0) return -1
-  const range = sel.getRangeAt(0)
-  const pre = range.cloneRange()
-  pre.selectNodeContents(el)
-  pre.setEnd(range.startContainer, range.startOffset)
-  return pre.toString().length
-}
-
-function setCaretCharOffset(el: HTMLElement, offset: number) {
-  const sel = window.getSelection()
-  if (!sel) return
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
-  let remaining = offset
-  let node: Node | null = walker.nextNode()
-  while (node) {
-    const len = node.textContent?.length || 0
-    if (remaining <= len) {
-      const range = document.createRange()
-      range.setStart(node, remaining)
-      range.collapse(true)
-      sel.removeAllRanges()
-      sel.addRange(range)
-      return
-    }
-    remaining -= len
-    node = walker.nextNode()
-  }
-  const range = document.createRange()
-  range.selectNodeContents(el)
-  range.collapse(false)
-  sel.removeAllRanges()
-  sel.addRange(range)
-}
-
-function normalizePastedContent(el: HTMLElement) {
-  if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) return
-  const caret = getCaretCharOffset(el)
-  const text = getInputText(el)
-  adapter.setInputText(el, text)
-  if (caret >= 0) setCaretCharOffset(el, caret)
-}
-
 function onInputFound(inputEl: HTMLElement) {
   if (dead) return
   currentInputEl = inputEl
@@ -254,13 +260,34 @@ function onInputFound(inputEl: HTMLElement) {
   inputEl.addEventListener('input', () => debouncedProcess(inputEl))
   inputEl.addEventListener('keyup', () => debouncedProcess(inputEl))
   inputEl.addEventListener('paste', () => {
-    setTimeout(() => {
-      normalizePastedContent(inputEl)
-      lastProcessedText = ''
-      processInput(inputEl)
-    }, 100)
+    setTimeout(() => processInput(inputEl), 50)
   })
   inputEl.addEventListener('focus', () => debouncedProcess(inputEl))
+
+  // Hide badge and panel on blur, carefully checking if we clicked our UI
+  inputEl.addEventListener('blur', () => {
+    setTimeout(() => {
+      const active = document.activeElement;
+      const state = getState();
+      if (state && active) {
+        if (state.badgeDiv.contains(active) || state.inspectPanelDiv.contains(active)) {
+          return;
+        }
+      }
+      hideBadge();
+      hideInspectPanel();
+    }, 100);
+  });
+
+  // Keep DOM state synced for React/Nextjs sites that clear inputs natively bypassing "input" event
+  if (syncTimer) clearInterval(syncTimer)
+  syncTimer = setInterval(() => {
+    if (dead) return;
+    const currentText = getInputText(inputEl);
+    if (currentText !== lastProcessedText) {
+      processInput(inputEl);
+    }
+  }, 250);
 
   // Hide badge when user clicks into the text box (not on a PII mark highlight)
   inputEl.addEventListener('click', (e) => {
@@ -271,16 +298,11 @@ function onInputFound(inputEl: HTMLElement) {
     }
   })
 
-  // Bug fix #1: hide badge/panel when user sends message (Enter key)
+  // Bug fix #1: hide badge/panel/tooltip and strip highlights when user sends message (Enter key)
   inputEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-      hideBadge()
-      hideInspectPanel()
-      resetActiveMode()
-      // Also clear storedOriginalText so next message starts fresh (bug fix #2)
-      storedOriginalText = null
-      storedMatches = []
-      lastProcessedText = ''
+      // Delay cleanup slightly so the site can capture the input first
+      setTimeout(() => cleanupOnSend(), 10)
     }
   })
 
@@ -311,9 +333,42 @@ function onInputFound(inputEl: HTMLElement) {
   )
 
   processInput(inputEl)
+
+  // --- Send Button cleanup hook ---
+  // Also hook into the send button to clean up when clicked
+  const sendBtn = adapter.getSendButton()
+  if (sendBtn) {
+    sendBtn.addEventListener('click', () => {
+      // Delay slightly to let the site process the click first
+      setTimeout(() => cleanupOnSend(), 50)
+    }, true)
+  }
+
+  // --- Input cleared detection ---
+  // Watch for the input content being cleared (e.g., site clears after send)
+  // to clean up orphaned UI elements.
+  const inputObserver = new MutationObserver(() => {
+    if (dead) return
+    const currentText = getInputText(inputEl)
+    if (currentText.trim() === '' && currentMatches.length > 0) {
+      // Input was cleared while we had matches — message was likely sent
+      cleanupOnSend()
+    }
+  })
+  inputObserver.observe(inputEl, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['value']
+  })
 }
 
 function onInputLost(_el: HTMLElement) {
+  if (syncTimer) {
+    clearInterval(syncTimer)
+    syncTimer = null
+  }
   hideInspectPanel()
   cleanup()
   cleanupFileHandler?.()
@@ -364,6 +419,7 @@ function init() {
     // Handle hover on input PII highlight marks
     const mark = target.closest?.('.pii-shield-mark') as HTMLElement | null
     if (mark?.dataset.token && mark.dataset.type && mark.dataset.original) {
+      console.log(`[PII Shield] Hovering mark: text=${mark.textContent}, token=${mark.dataset.token}, type=${mark.dataset.type}, orig=${mark.dataset.original}`);
       showTooltip(
         e.clientX,
         e.clientY,
@@ -377,13 +433,13 @@ function init() {
 
     // Handle hover on response unmasked spans
     const unmasked = target.closest?.('.pii-shield-unmasked') as HTMLElement | null
-    if (unmasked?.dataset.piiSentAs) {
+    if (unmasked?.dataset.piiToken) {
       const piiType = (unmasked.dataset.piiType || 'NAME') as PIIType
       showTooltip(
         e.clientX,
         e.clientY,
         piiType,
-        unmasked.dataset.piiSentAs,
+        unmasked.dataset.piiSentAs || unmasked.dataset.piiToken,
         unmasked.dataset.piiOriginal || unmasked.textContent || '',
         'incoming'
       )
@@ -400,6 +456,22 @@ function init() {
       scheduleHide()
     }
   })
+
+  // Global click-away handler to dismiss UI elements
+  document.addEventListener('mousedown', (e) => {
+    if (dead) return;
+    const target = e.target as HTMLElement;
+    const mark = target.closest?.('.pii-shield-mark');
+    const badge = target.closest?.('.pii-shield-badge');
+    const panel = target.closest?.('.pii-shield-inspect-panel');
+    const tooltip = target.closest?.('.pii-shield-tooltip');
+
+    if (!mark && !badge && !panel && !tooltip) {
+      hideBadge();
+      hideInspectPanel();
+      hideTooltip();
+    }
+  }, true);
 
   // Click a highlighted mark → replace just that one occurrence, OR click ignore
   document.addEventListener('click', (e) => {
@@ -420,10 +492,6 @@ function init() {
     }
 
     const mark = target.closest?.('.pii-shield-mark') as HTMLElement | null
-    if (!mark && !target.closest?.('.pii-shield-badge') && !target.closest?.('.pii-shield-inspect-panel')) {
-      hideBadge()
-      hideInspectPanel()
-    }
     if (!mark || !currentInputEl) return
 
     if (autoReplace) return // In auto-replace mode, clicking does not replace since it's automatic.
@@ -464,6 +532,7 @@ try {
       customBlockList = s.customBlockList || []
       updateFileHandlerSettings(enabledTypes, customBlockList)
       syncReplacements()
+      reapplyUnmasking(autoReplace)
       if (currentInputEl) {
         lastProcessedText = ''
         processInput(currentInputEl)

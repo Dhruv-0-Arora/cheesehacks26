@@ -76,7 +76,7 @@ export function setupInterceptor(adapter: SiteAdapter) {
 export function setupResponseUnmasking(_adapter: SiteAdapter) {
   const observer = new MutationObserver((mutations) => {
     const tokenMap = getTokenMap()
-    if (Object.keys(tokenMap).length === 0 && !isAutoReplace) return
+    if (Object.keys(tokenMap).length === 0) return
 
     for (const mutation of mutations) {
       if (mutation.type === 'childList') {
@@ -109,10 +109,11 @@ function unmaskResponseElement(container: HTMLElement, _tokenMap: TokenMap) {
     textNodes.push(node)
   }
 
-  // Build fake→original map from replacement map
+  // Build fake→original and original→fake maps from replacement map
   const replacementMap = getReplacementMap()
   const fakeToOriginal: Record<string, string> = {};
   const fakeToType: Record<string, string> = {};
+  const originalToFake: Record<string, string> = {};
   for (const [key, fake] of Object.entries(replacementMap)) {
     // key is "TYPE:originalText"
     const colonIdx = key.indexOf(':');
@@ -122,6 +123,7 @@ function unmaskResponseElement(container: HTMLElement, _tokenMap: TokenMap) {
       if (original) {
         fakeToOriginal[fake] = original;
         fakeToType[fake] = piiType;
+        originalToFake[original] = fake;
       }
     }
   }
@@ -138,6 +140,17 @@ function unmaskResponseElement(container: HTMLElement, _tokenMap: TokenMap) {
     }
   }
 
+  // Helper: given a value (original PII text), resolve its anonymized token.
+  // Returns '[xxx_N]' format or 'unknown' if not found.
+  function resolveToken(value: string): string {
+    if (originalToToken[value]) return originalToToken[value];
+    // Fallback: scan token map values
+    for (const [tok, orig] of Object.entries(_tokenMap)) {
+      if (orig === value) return tok;
+    }
+    return 'unknown';
+  }
+
   for (const textNode of textNodes) {
     const parent = textNode.parentElement
     if (!parent) continue;
@@ -146,6 +159,8 @@ function unmaskResponseElement(container: HTMLElement, _tokenMap: TokenMap) {
     if (parent.closest('.pii-shield-unmasked') || 
         parent.closest('.pii-shield-user-msg') ||
         parent.closest('.pii-shield-highlight-layer') ||
+        parent.closest('.pii-shield-tooltip') ||
+        parent.closest('.pii-shield-badge') ||
         parent.closest('textarea') || 
         parent.closest('[contenteditable="true"]') ||
         parent.tagName === 'TEXTAREA' || 
@@ -163,19 +178,17 @@ function unmaskResponseElement(container: HTMLElement, _tokenMap: TokenMap) {
     // 1. Match tokens like [name_1], [address_1], etc.
     patterns.push('\\[[a-z]+_\\d+\\]');
 
-    if (isAutoReplace) {
-      // 2. Token map keys (the tokens themselves, e.g. "[address_1]")
-      //    and values (the originals, e.g. "123 Main St")
-      for (const [token, originalVal] of Object.entries(_tokenMap)) {
-        patterns.push(escapeRegExp(token));
-        patterns.push(escapeRegExp(originalVal));
-      }
+    // 2. Token map keys (the tokens themselves, e.g. "[address_1]")
+    //    and values (the originals, e.g. "123 Main St")
+    for (const [token, originalVal] of Object.entries(_tokenMap)) {
+      patterns.push(escapeRegExp(token));
+      patterns.push(escapeRegExp(originalVal));
+    }
 
-      // 3. Fake-to-original entries
-      for (const [fake, originalVal] of Object.entries(fakeToOriginal)) {
-        patterns.push(escapeRegExp(fake));
-        patterns.push(escapeRegExp(originalVal));
-      }
+    // 3. Fake-to-original entries
+    for (const [fake, originalVal] of Object.entries(fakeToOriginal)) {
+      patterns.push(escapeRegExp(fake));
+      patterns.push(escapeRegExp(originalVal));
     }
 
     // Deduplicate and filter empty
@@ -206,36 +219,42 @@ function unmaskResponseElement(container: HTMLElement, _tokenMap: TokenMap) {
       span.style.cursor = 'help';
 
       if (_tokenMap[matchText]) {
-        // matchText is a token like [address_1] → show original
+        // matchText is a token like [address_1] → show original or token based on toggle
         const tokenType = matchText.match(/^\[([a-z]+)_\d+\]$/)?.[1]?.toUpperCase() || 'NAME';
         span.className = 'pii-shield-unmasked';
-        span.style.textDecoration = 'underline dashed #a3be8c';
+        span.style.textDecoration = isAutoReplace ? 'underline dashed #a3be8c' : 'underline dashed #81a1c1';
         span.dataset.piiSentAs = matchText;
+        span.dataset.piiToken = matchText;
         span.dataset.piiOriginal = _tokenMap[matchText];
         span.dataset.piiType = tokenType;
-        span.textContent = _tokenMap[matchText];
+        span.textContent = isAutoReplace ? _tokenMap[matchText] : matchText;
       } else if (fakeToOriginal[matchText]) {
         // matchText is a fake value → find the corresponding token
         const origVal = fakeToOriginal[matchText];
-        const token = originalToToken[origVal] || matchText;
+        const token = resolveToken(origVal);
         const piiType = fakeToType[matchText] || originalToType[origVal] || 'NAME';
         span.className = 'pii-shield-unmasked';
-        span.style.textDecoration = 'underline dashed #a3be8c';
-        span.dataset.piiSentAs = token;
+        span.style.textDecoration = isAutoReplace ? 'underline dashed #a3be8c' : 'underline dashed #81a1c1';
+        span.dataset.piiSentAs = matchText;
+        span.dataset.piiToken = token;
         span.dataset.piiOriginal = origVal;
         span.dataset.piiType = piiType;
-        span.textContent = origVal;
+        span.dataset.piiFake = matchText;
+        span.textContent = isAutoReplace ? origVal : matchText;
       } else {
         // matchText is an original value that appeared in the response
-        // Find which token it maps to
-        const token = originalToToken[matchText] || 'unknown';
+        // (likely because the stream already replaced fake→original)
+        const token = resolveToken(matchText);
         const piiType = originalToType[matchText] || 'NAME';
+        const fakeVal = originalToFake[matchText] || '';
         span.className = 'pii-shield-unmasked';
-        span.style.textDecoration = 'underline dashed #ebcb8b';
-        span.dataset.piiSentAs = token;
+        span.style.textDecoration = isAutoReplace ? 'underline dashed #a3be8c' : 'underline dashed #ebcb8b';
+        span.dataset.piiSentAs = isAutoReplace ? token : (fakeVal || token);
+        span.dataset.piiToken = token;
         span.dataset.piiOriginal = matchText;
         span.dataset.piiType = piiType;
-        span.textContent = matchText;
+        span.dataset.piiFake = fakeVal;
+        span.textContent = isAutoReplace ? matchText : (fakeVal || token);
       }
       
       fragment.appendChild(span);
@@ -248,5 +267,31 @@ function unmaskResponseElement(container: HTMLElement, _tokenMap: TokenMap) {
     }
 
     textNode.parentNode?.replaceChild(fragment, textNode);
+  }
+}
+
+/**
+ * Immediately re-apply or revert unmasking on all existing `.pii-shield-unmasked` spans.
+ * Called when the user toggles Auto Replace on/off.
+ *  - autoReplace ON  → show original PII text
+ *  - autoReplace OFF → show token/fake text (what ChatGPT saw)
+ */
+export function reapplyUnmasking(autoReplace: boolean) {
+  isAutoReplace = autoReplace;
+  const spans = document.querySelectorAll<HTMLElement>('.pii-shield-unmasked');
+  for (const span of spans) {
+    const original = span.dataset.piiOriginal || '';
+    const token = span.dataset.piiToken || '';
+    const fake = span.dataset.piiFake || '';
+
+    if (autoReplace) {
+      // Show original PII text
+      span.textContent = original;
+      span.style.textDecoration = 'underline dashed #a3be8c';
+    } else {
+      // Show what was actually sent: prefer fake value if one exists, otherwise token
+      span.textContent = fake || token;
+      span.style.textDecoration = 'underline dashed #81a1c1';
+    }
   }
 }
