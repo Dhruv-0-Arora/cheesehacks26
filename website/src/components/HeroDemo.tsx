@@ -230,8 +230,8 @@ export default function HeroDemo() {
 
   return (
     <div className="space-y-6 text-left select-text" style={{ pointerEvents: 'auto' }}>
-      {/* Example buttons — separate from input */}
-      <div className="rounded-xl border border-[#434C5E] bg-[#3B4252]/40 backdrop-blur-sm p-4">
+      {/* Example buttons — separate from input, with blur */}
+      <div className="rounded-xl border border-[#434C5E]/60 bg-[#3B4252]/25 backdrop-blur-md p-4">
         <p className="text-xs font-mono text-[#81A1C1] uppercase tracking-wider mb-3">Examples</p>
         <div className="flex flex-wrap gap-2">
           {SUGGESTIONS.map(({ label, icon, content }, i) => (
@@ -239,8 +239,8 @@ export default function HeroDemo() {
               key={i}
               className={`flex items-center gap-1.5 text-xs rounded-full px-3 py-1.5 border transition-all cursor-pointer ${
                 input === content
-                  ? 'bg-[#88C0D0]/15 border-[#88C0D0] text-[#88C0D0]'
-                  : 'text-[#D8DEE9] bg-[#2E3440] border-[#434C5E] hover:border-[#88C0D0] hover:text-[#ECEFF4]'
+                  ? 'bg-[#88C0D0]/20 border-[#88C0D0] text-[#88C0D0]'
+                  : 'text-[#D8DEE9] bg-[#2E3440]/50 border-[#434C5E]/80 hover:border-[#88C0D0] hover:text-[#ECEFF4]'
               }`}
               onClick={() => setInput(content)}
               title={content}
@@ -253,7 +253,7 @@ export default function HeroDemo() {
       </div>
 
       {/* Message input — separate container */}
-      <div className="rounded-2xl bg-[#2E3440] border border-[#434C5E] transition-colors relative overflow-hidden">
+      <div className="rounded-2xl bg-[#2E3440]/70 backdrop-blur-md border border-[#434C5E]/80 transition-colors relative overflow-hidden">
         {input && matches.length > 0 && (
           <div
             ref={overlayRef}
@@ -334,7 +334,7 @@ export default function HeroDemo() {
                   </button>
                 </div>
               </div>
-              <div className="rounded-xl border border-[#88C0D0]/30 bg-[#2E3440] p-4">
+              <div className="rounded-xl border border-[#88C0D0]/30 bg-[#2E3440]/60 backdrop-blur-md p-4">
                 <p className="font-mono text-sm text-[#D8DEE9] whitespace-pre-wrap break-words leading-relaxed">
                 <HighlightedText
                   text={redactMode === 'labels' ? maskedText : replacedText}
@@ -346,7 +346,7 @@ export default function HeroDemo() {
           )}
 
           {mappings.length > 0 && (
-            <div className="rounded-xl border border-[#434C5E] bg-[#2E3440] p-4">
+            <div className="rounded-xl border border-[#434C5E]/80 bg-[#2E3440]/60 backdrop-blur-md p-4">
               <div className="text-xs font-mono text-[#81A1C1] uppercase tracking-wider mb-1 flex items-center gap-2">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#81A1C1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" />
