@@ -281,14 +281,14 @@ export default function HeroDemo() {
           rows={1}
           aria-label="Type or paste text to see PII detection"
         />
-        <div className="absolute right-3 bottom-3 flex items-center gap-2 z-[2]">
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-end gap-2 z-[2]">
           {hasPII && (
-            <span className="text-[10px] font-semibold text-[#BF616A] bg-[#BF616A]/10 px-2 py-1 rounded-full">
+            <span className="text-[10px] font-semibold text-[#BF616A] bg-[#BF616A]/10 px-2 py-1 rounded-full flex items-center">
               {matches.length} PII
             </span>
           )}
           <div
-            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
               input.trim() ? 'bg-[#88C0D0] text-[#2E3440]' : 'bg-[#3B4252] text-[#4C566A]'
             }`}
           >
