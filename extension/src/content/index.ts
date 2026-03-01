@@ -1,5 +1,5 @@
 import { detectSite } from './sites.ts'
-import { analyzeText, analyzeTextWithML } from '../detectors/engine.ts'
+import { analyzeTextWithML } from '../detectors/engine.ts'
 import { createHighlightLayer, renderHighlights, cleanup, showTooltip, scheduleHide, setReplaceCallback, updateInspectPanelData, hideInspectPanel, resetActiveMode, hideTooltip, hideBadge, getState, cleanupAllUI } from './highlighter.ts'
 import { setCurrentMatches, setFileBlocked, setupInterceptor, setupResponseUnmasking, reapplyUnmasking } from './interceptor.ts'
 import { watchForInput, stopWatching } from './observer.ts'
@@ -199,29 +199,31 @@ async function processInput(el: HTMLElement) {
     return
   }
 
-  // TEMP: regex disabled for ML-only testing
   const knownFakes = getKnownFakeValues()
-  // const rawMatches = analyzeText(text, enabledTypes, customBlockList)
-  // let matches = rawMatches.filter(m => !knownFakes.has(m.text))
-  // matches = matches.filter(m => !ignoredTokens.has(m.text + ':' + m.type))
-  currentMatches = []
-  renderHighlights(text, [], autoReplace)
-  setCurrentMatches([], autoReplace)
-  updateInspectPanelData(text, [], getTokenMap(), getReplacementMap())
+
+  function filterMatches(matches: PIIMatch[]): PIIMatch[] {
+    return matches
+      .filter(m => !knownFakes.has(m.text))
+      .filter(m => !ignoredTokens.has(m.text + ':' + m.type))
+  }
+
+  function applyMatches(matches: PIIMatch[]) {
+    currentMatches = matches
+    renderHighlights(text, matches, autoReplace)
+    setCurrentMatches(matches, autoReplace)
+    syncReplacements()
+    updateInspectPanelData(text, matches, getTokenMap(), getReplacementMap())
+  }
 
   try {
-    const mlMatches = await analyzeTextWithML(text, enabledTypes, customBlockList)
+    const merged = await analyzeTextWithML(text, enabledTypes, customBlockList, (regexMatches) => {
+      applyMatches(filterMatches(regexMatches))
+    })
     if (lastProcessedText === text && !dead) {
-      let filteredMl = mlMatches.filter(m => !knownFakes.has(m.text))
-      filteredMl = filteredMl.filter(m => !ignoredTokens.has(m.text + ':' + m.type))
-      currentMatches = filteredMl
-      renderHighlights(text, filteredMl, autoReplace)
-      setCurrentMatches(filteredMl, autoReplace)
-      syncReplacements()
-      updateInspectPanelData(text, filteredMl, getTokenMap(), getReplacementMap())
+      applyMatches(filterMatches(merged))
     }
   } catch {
-    // ML unavailable
+    // ML unavailable — regex results already applied via callback
   }
 
   safeSendMessage({
