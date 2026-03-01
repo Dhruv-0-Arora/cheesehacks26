@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "description": "Detects and masks PII in AI chat inputs. Highlights sensitive data and replaces it with tokens or fake values. Runs entirely locally.",
   "icons": {
-    "16": "icons/icon-16.png",
-    "48": "icons/icon-48.png",
-    "128": "icons/icon-128.png"
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
   "action": {
     "default_popup": "popup.html",
