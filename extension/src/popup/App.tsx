@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import type { ExtensionSettings, PIIType } from '../types.ts'
+import type { ExtensionSettings, TokenMap, PIIType } from '../types.ts'
 import { useApi } from '../context.tsx'
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
   enabled: true,
+  autoReplace: false,
   enabledTypes: ['NAME', 'EMAIL', 'PHONE', 'FINANCIAL', 'SSN', 'ID', 'ADDRESS', 'SECRET', 'URL', 'DATE', 'PATH'],
   customBlockList: [],
 }
@@ -26,11 +27,19 @@ const PII_TYPE_LABELS: Record<PIIType, string> = {
 function App() {
   const api = useApi()
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS)
+  const [tokenMap, setTokenMap] = useState<TokenMap>({})
+  const [replacementMap, setReplacementMap] = useState<Record<string, string>>({})
   const [customTerm, setCustomTerm] = useState('')
 
   useEffect(() => {
     api.getSettings((res) => {
       if (res?.settings) setSettings(res.settings)
+    })
+    api.getTokenMap((res) => {
+      if (res?.tokenMap) setTokenMap(res.tokenMap)
+    })
+    api.getReplacementMap((res) => {
+      if (res?.replacementMap) setReplacementMap(res.replacementMap)
     })
   }, [api])
 
@@ -58,6 +67,18 @@ function App() {
     updateSettings({ customBlockList: settings.customBlockList.filter((t) => t !== term) })
   }
 
+  const tokenEntries = Object.entries(tokenMap)
+  const typeCounts: Record<string, number> = {}
+  for (const [token] of tokenEntries) {
+    const type = token.replace(/^\[/, '').replace(/_\d+\]$/, '')
+    typeCounts[type] = (typeCounts[type] || 0) + 1
+  }
+
+  const replacementEntries = Object.entries(replacementMap).map(([key, fake]) => {
+    const colon = key.indexOf(':')
+    return { type: key.slice(0, colon), original: key.slice(colon + 1), fake }
+  })
+
   return (
     <div className="popup-container">
       <header className="popup-header">
@@ -76,13 +97,72 @@ function App() {
           </svg>
           <h1>Fegis</h1>
         </div>
-        <label className="toggle-row">
-          <span>{settings.enabled ? 'Active' : 'Disabled'}</span>
-          <div className={`toggle ${settings.enabled ? 'on' : ''}`} onClick={() => updateSettings({ enabled: !settings.enabled })}>
-            <div className="toggle-knob" />
-          </div>
-        </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+          <label className="toggle-row">
+            <span>{settings.enabled ? 'Active' : 'Disabled'}</span>
+            <div className={`toggle ${settings.enabled ? 'on' : ''}`} onClick={() => updateSettings({ enabled: !settings.enabled })}>
+              <div className="toggle-knob" />
+            </div>
+          </label>
+          <label className="toggle-row">
+            <span style={{ color: settings.autoReplace ? '#A3BE8C' : undefined }}>
+              {settings.autoReplace ? 'Auto Replace (Beta)' : 'Auto Replace (Off)'}
+            </span>
+            <div className={`toggle ${settings.autoReplace ? 'on' : ''}`} onClick={() => updateSettings({ autoReplace: !settings.autoReplace })}>
+              <div className="toggle-knob" />
+            </div>
+          </label>
+        </div>
       </header>
+
+      {/* Auto Replace panels — only shown when Beta mode is active */}
+      {settings.autoReplace && tokenEntries.length > 0 && (
+        <section className="section">
+          <h2>Session Summary</h2>
+          <div className="stats-grid">
+            {Object.entries(typeCounts).map(([type, count]) => (
+              <div key={type} className="stat-chip">
+                <span className="stat-count">{count}</span>
+                <span className="stat-label">{type.toLowerCase()}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {settings.autoReplace && replacementEntries.length > 0 && (
+        <section className="section">
+          <h2>Replacement Map</h2>
+          <p style={{ fontSize: '11px', color: '#4C566A', marginBottom: '8px' }}>
+            Same original value always maps to the same replacement.
+          </p>
+          <div className="token-list">
+            {replacementEntries.map(({ type, original, fake }) => (
+              <div key={`${type}:${original}`} className="token-row">
+                <span className="token-key" style={{ color: '#81A1C1', fontSize: '10px', flexShrink: 0 }}>{type}</span>
+                <span className="token-value" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{original}</span>
+                <span className="token-arrow">&rarr;</span>
+                <span className="token-value" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, color: '#A3BE8C' }}>{fake}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {settings.autoReplace && tokenEntries.length > 0 && (
+        <section className="section">
+          <h2>Token Mappings</h2>
+          <div className="token-list">
+            {tokenEntries.map(([token, original]) => (
+              <div key={token} className="token-row">
+                <code className="token-key">{token}</code>
+                <span className="token-arrow">&rarr;</span>
+                <span className="token-value">{original}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="section">
         <h2>Detection Types</h2>

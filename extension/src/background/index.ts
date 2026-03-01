@@ -2,6 +2,7 @@ import type { ExtensionSettings, TokenMap } from '../types.ts'
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
   enabled: true,
+  autoReplace: false,
   enabledTypes: ['NAME', 'EMAIL', 'PHONE', 'FINANCIAL', 'SSN', 'ID', 'ADDRESS', 'SECRET', 'URL', 'DATE', 'PATH'],
   customBlockList: [],
 }

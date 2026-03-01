@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && npm run build:ext",
-    "build:ext": "vite build && vite build --mode content && vite build --mode background && cp src/content/highlight.css dist/assets/highlight.css",
+    "build:ext": "vite build && vite build --mode content && vite build --mode background && vite build --mode interceptor && cp src/content/highlight.css dist/assets/highlight.css",
     "lint": "eslint .",
     "preview": "vite preview"
   },

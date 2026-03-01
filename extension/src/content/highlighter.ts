@@ -180,10 +180,16 @@ function positionHighlightLayer(inputEl: HTMLElement, highlightDiv: HTMLDivEleme
   highlightDiv.style.background = 'transparent'
 }
 
-export function renderHighlights(text: string, matches: PIIMatch[]) {
+export function renderHighlights(text: string, matches: PIIMatch[], autoReplace: boolean = false) {
   if (!state) return
 
   const { highlightDiv, inputEl } = state
+
+  if (matches.length === 0) {
+    state.highlightDiv.innerHTML = ''
+    updateBadge(0, autoReplace)
+    return
+  }
 
   positionHighlightLayer(inputEl, highlightDiv)
 
@@ -220,21 +226,31 @@ export function renderHighlights(text: string, matches: PIIMatch[]) {
     frag.appendChild(document.createTextNode(text.substring(currentIndex)))
   }
 
-  highlightDiv.textContent = ''
-  highlightDiv.appendChild(frag)
+  // Prevent re-rendering and re-showing badge if the highlight layer is exactly the same 
+  const oldHtml = highlightDiv.innerHTML
+  const tempDiv = document.createElement('div')
+  tempDiv.appendChild(frag)
+  const newHtml = tempDiv.innerHTML
 
-  highlightDiv.scrollTop = (inputEl as HTMLTextAreaElement).scrollTop ?? 0
-  highlightDiv.scrollLeft = (inputEl as HTMLTextAreaElement).scrollLeft ?? 0
-
-  updateBadge(matches.length)
+  if (oldHtml !== newHtml) {
+    highlightDiv.innerHTML = newHtml
+    highlightDiv.scrollTop = (inputEl as HTMLTextAreaElement).scrollTop ?? 0
+    highlightDiv.scrollLeft = (inputEl as HTMLTextAreaElement).scrollLeft ?? 0
+    updateBadge(matches.length, autoReplace)
+  }
 }
 
-function updateBadge(count: number) {
+function updateBadge(count: number, autoReplace: boolean = false) {
   if (!state) return
   const { badgeDiv, inputEl } = state
 
-  const keepVisible = activeReplaceMode === 'labels' || activeReplaceMode === 'replaced'
-  if (count === 0 && !keepVisible) {
+  if (autoReplace) { // Auto Replace ON → handles everything automatically, never show badge
+    badgeDiv.style.display = 'none'
+    hideInspectPanel()
+    return
+  }
+
+  if (count === 0) {
     badgeDiv.style.display = 'none'
     return
   }
@@ -433,8 +449,9 @@ function renderInspectPanelContent() {
 
 // --- Tooltip ---
 
-export function showTooltip(x: number, y: number, type: PIIType, token: string, original: string) {
+export function showTooltip(x: number, y: number, type: PIIType, token: string, original: string, direction: 'outgoing' | 'incoming' = 'outgoing') {
   if (!state) return
+  const isAutoReplace = (window as any).__PII_SHIELD_AUTO_REPLACE__?.() || false;
   const { tooltipDiv } = state
 
   if (tooltipHideTimer) {
@@ -442,13 +459,45 @@ export function showTooltip(x: number, y: number, type: PIIType, token: string, 
     tooltipHideTimer = null
   }
 
-  const color = TYPE_COLORS[type] || '#81a1c1'
-  tooltipDiv.innerHTML = `
-    <div class="pii-shield-tooltip-type">${type}</div>
-    <div class="pii-shield-tooltip-original">"${escapeHtml(original)}"</div>
-    <div class="pii-shield-tooltip-token" style="color:${color}">&rarr; ${escapeHtml(token)}</div>
-  `
-  const TOP_OFFSET = 70
+  if (direction === 'incoming') {
+    // Incoming response: compact — just show what token was used
+    tooltipDiv.innerHTML = `
+      <div class="pii-shield-tooltip-stats" style="padding: 8px 12px;">
+        <div class="stat">
+          <span class="value" style="color: ${TYPE_COLORS[type] || '#eceff4'}; font-family: monospace; font-size: 13px;">replaced by ${escapeHtml(token)}</span>
+        </div>
+      </div>
+    `
+  } else {
+    tooltipDiv.innerHTML = `
+      <div class="pii-shield-tooltip-title">
+        ${isAutoReplace ? 'Auto Updated (Beta)' : 'Private Information Detected'}
+      </div>
+      <div class="pii-shield-tooltip-stats">
+        ${isAutoReplace ? `
+        <div class="stat">
+          <span class="value" style="color: ${TYPE_COLORS[type] || '#eceff4'}">Replaced to <span style="font-family: monospace; color: #eceff4;">${escapeHtml(token)}</span> to protect privacy</span>
+        </div>
+        ` : `
+        <div class="stat">
+          <span class="label">Type</span>
+          <span class="value" style="color: ${TYPE_COLORS[type] || '#eceff4'}">${type}</span>
+        </div>
+        <div class="stat">
+          <span class="label">Token</span>
+          <span class="value" style="font-family: monospace;">${escapeHtml(token)}</span>
+        </div>
+        `}
+      </div>
+      ${isAutoReplace ?
+        `<div class="pii-shield-tooltip-footer pii-ignore-btn" data-type="${type}" data-original="${escapeHtml(original)}" style="cursor: pointer; color: #ebcb8b; padding-top: 8px; font-weight: bold;">
+           Click here to IGNORE
+         </div>` :
+        '<div class="pii-shield-tooltip-footer">Click highlight to block only this instance</div>'
+      }
+    `
+  }
+  const TOP_OFFSET = 90
   const SIDE_MARGIN = 10
   const TOOLTIP_HEIGHT = 80
   let top = y - TOP_OFFSET < SIDE_MARGIN ? y + 16 : y - TOP_OFFSET
@@ -467,7 +516,7 @@ function scheduleHideTooltip() {
   if (tooltipHideTimer) clearTimeout(tooltipHideTimer)
   tooltipHideTimer = setTimeout(() => {
     hideTooltip()
-  }, 300)
+  }, 100)
 }
 
 export function hideTooltip() {
@@ -536,4 +585,10 @@ export function cleanup() {
 
 export function getState(): HighlightState | null {
   return state
+}
+
+export function hideBadge() {
+  if (state?.badgeDiv) {
+    state.badgeDiv.style.display = 'none'
+  }
 }

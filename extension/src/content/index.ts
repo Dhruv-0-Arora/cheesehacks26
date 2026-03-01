@@ -1,14 +1,16 @@
 import { detectSite } from './sites.ts'
 import { analyzeText } from '../detectors/engine.ts'
-import { createHighlightLayer, renderHighlights, cleanup, showTooltip, scheduleHide, setReplaceCallback, updateInspectPanelData, hideInspectPanel, resetActiveMode } from './highlighter.ts'
+import { createHighlightLayer, renderHighlights, cleanup, showTooltip, scheduleHide, setReplaceCallback, updateInspectPanelData, hideInspectPanel, resetActiveMode, hideTooltip, hideBadge } from './highlighter.ts'
 import { setCurrentMatches, setupInterceptor, setupResponseUnmasking } from './interceptor.ts'
 import { watchForInput, stopWatching } from './observer.ts'
 import { loadTokenMap, loadReplacementMap, getFakeReplacement, saveReplacementMap, saveTokenMap, getTokenMap, getReplacementMap, getTokenForMatch, getKnownFakeValues } from '../tokens/manager.ts'
 import type { PIIMatch, ExtensionSettings, PIIType } from '../types.ts'
 
 let enabled = true
+let autoReplace = false
 let enabledTypes: PIIType[] = ['NAME', 'EMAIL', 'PHONE', 'FINANCIAL', 'SSN', 'ID', 'ADDRESS', 'SECRET', 'URL', 'DATE', 'PATH']
 let customBlockList: string[] = []
+let ignoredTokens = new Set<string>()
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let currentInputEl: HTMLElement | null = null
 let lastProcessedText = ''
@@ -56,6 +58,21 @@ function getInputText(el: HTMLElement): string {
   return el.innerText || el.textContent || ''
 }
 
+function syncReplacements() {
+  const replacements = currentMatches.map(m => {
+    return { original: m.text, fake: autoReplace ? getTokenForMatch(m) : getFakeReplacement(m) };
+  });
+  window.postMessage({
+    source: 'PII_SHIELD_EXT',
+    type: 'SYNC_REPLACEMENTS',
+    autoReplace,
+    replacements
+  }, '*');
+  if (autoReplace) saveTokenMap();
+}
+
+
+
 function processInput(el: HTMLElement) {
   if (!enabled || dead) return
 
@@ -87,7 +104,7 @@ function processInput(el: HTMLElement) {
 
   if (!text.trim()) {
     renderHighlights('', [])
-    setCurrentMatches([])
+    setCurrentMatches([], autoReplace)
     currentMatches = []
     updateInspectPanelData('', [], {}, {})
     return
@@ -95,10 +112,12 @@ function processInput(el: HTMLElement) {
 
   const rawMatches = analyzeText(text, enabledTypes, customBlockList)
   const knownFakes = getKnownFakeValues()
-  const matches = rawMatches.filter(m => !knownFakes.has(m.text))
+  let matches = rawMatches.filter(m => !knownFakes.has(m.text))
+  matches = matches.filter(m => !ignoredTokens.has(m.text + ':' + m.type))
   currentMatches = matches
-  renderHighlights(text, matches)
-  setCurrentMatches(matches)
+  renderHighlights(text, matches, autoReplace)
+  setCurrentMatches(matches, autoReplace)
+  syncReplacements()
   updateInspectPanelData(text, matches, getTokenMap(), getReplacementMap())
 
   safeSendMessage({
@@ -123,12 +142,16 @@ function handleModeSwitch(mode: 'original' | 'labels' | 'replaced') {
   }
 
   if (mode === 'original') {
-    lastProcessedText = storedOriginalText
-    currentMatches = [...storedMatches]
-    adapter.setInputText(currentInputEl, storedOriginalText)
-    renderHighlights(storedOriginalText, storedMatches)
+    const origText = storedOriginalText
+    const origMatches = [...storedMatches]
+    storedOriginalText = null
+    storedMatches = []
+    currentMatches = origMatches
+    lastProcessedText = origText
+    adapter.setInputText(currentInputEl, origText)
+    renderHighlights(origText, origMatches)
     setCurrentMatches(currentMatches)
-    updateInspectPanelData(storedOriginalText, storedMatches, getTokenMap(), getReplacementMap())
+    updateInspectPanelData(origText, origMatches, getTokenMap(), getReplacementMap())
     return
   }
 
@@ -141,6 +164,7 @@ function handleModeSwitch(mode: 'original' | 'labels' | 'replaced') {
 
   for (const match of forwardSorted) {
     result += storedOriginalText.slice(lastEnd, match.start)
+    getTokenForMatch(match) // Guarantee it's in the token map so reverse-lookup succeeds!
     const replacement = mode === 'labels' ? getTokenForMatch(match) : getFakeReplacement(match)
     const newStart = result.length
     result += replacement
@@ -156,7 +180,12 @@ function handleModeSwitch(mode: 'original' | 'labels' | 'replaced') {
   result += storedOriginalText.slice(lastEnd)
 
   currentMatches = []
-  setCurrentMatches([])
+  setCurrentMatches([], autoReplace)
+  renderHighlights('', [], autoReplace)
+  syncReplacements()
+
+  // Set lastProcessedText BEFORE setInputText so processInput's early-return
+  // (text === lastProcessedText) fires before storedOriginalText restoration logic
   lastProcessedText = result
   adapter.setInputText(currentInputEl, result)
   renderHighlights(result, highlightMatches)
@@ -170,12 +199,37 @@ function onInputFound(inputEl: HTMLElement) {
   setReplaceCallback(handleModeSwitch)
   createHighlightLayer(inputEl)
 
+  // Expose autoReplace to interceptor and highlighter
+  ;(window as any).__PII_SHIELD_AUTO_REPLACE__ = () => autoReplace
+
   inputEl.addEventListener('input', () => debouncedProcess(inputEl))
   inputEl.addEventListener('keyup', () => debouncedProcess(inputEl))
   inputEl.addEventListener('paste', () => {
     setTimeout(() => processInput(inputEl), 50)
   })
   inputEl.addEventListener('focus', () => debouncedProcess(inputEl))
+
+  // Hide badge when user clicks into the text box (not on a PII mark highlight)
+  inputEl.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement
+    if (!target.closest?.('.pii-shield-mark')) {
+      hideBadge()
+      hideInspectPanel()
+    }
+  })
+
+  // Bug fix #1: hide badge/panel when user sends message (Enter key)
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      hideBadge()
+      hideInspectPanel()
+      resetActiveMode()
+      // Also clear storedOriginalText so next message starts fresh (bug fix #2)
+      storedOriginalText = null
+      storedMatches = []
+      lastProcessedText = ''
+    }
+  })
 
   processInput(inputEl)
 }
@@ -186,6 +240,8 @@ function onInputLost(_el: HTMLElement) {
   currentInputEl = null
   lastProcessedText = ''
   currentMatches = []
+  // Bug fix #2: always clear stored state so the next re-attach starts fresh
+  // and doesn't auto-paste the old redacted/replaced text into the new message.
   storedOriginalText = null
   storedMatches = []
 }
@@ -201,8 +257,10 @@ function init() {
     if (r?.settings) {
       const s = r.settings
       enabled = s.enabled
+      autoReplace = s.autoReplace || false
       enabledTypes = s.enabledTypes
       customBlockList = s.customBlockList || []
+      syncReplacements()
     }
   })
 
@@ -217,25 +275,98 @@ function init() {
 
   document.addEventListener('mouseover', (e) => {
     if (dead) return
-    const mark = (e.target as HTMLElement).closest?.('.pii-shield-mark') as HTMLElement | null
-    if (mark?.dataset.fakeValue && mark.dataset.type && mark.dataset.original) {
+    const target = e.target as HTMLElement
+
+    // Handle hover on input PII highlight marks
+    const mark = target.closest?.('.pii-shield-mark') as HTMLElement | null
+    if (mark?.dataset.token && mark.dataset.type && mark.dataset.original) {
       showTooltip(
         e.clientX,
         e.clientY,
         mark.dataset.type as PIIType,
-        mark.dataset.fakeValue,
-        mark.dataset.original
+        mark.dataset.token,
+        mark.dataset.original,
+        'outgoing'
       )
+      return
+    }
+
+    // Handle hover on response unmasked spans
+    const unmasked = target.closest?.('.pii-shield-unmasked') as HTMLElement | null
+    if (unmasked?.dataset.piiSentAs) {
+      const piiType = (unmasked.dataset.piiType || 'NAME') as PIIType
+      showTooltip(
+        e.clientX,
+        e.clientY,
+        piiType,
+        unmasked.dataset.piiSentAs,
+        unmasked.dataset.piiOriginal || unmasked.textContent || '',
+        'incoming'
+      )
+      return
     }
   })
 
   document.addEventListener('mouseout', (e) => {
     if (dead) return
-    const mark = (e.target as HTMLElement).closest?.('.pii-shield-mark')
-    if (mark) {
+    const target = e.target as HTMLElement
+    const mark = target.closest?.('.pii-shield-mark')
+    const unmasked = target.closest?.('.pii-shield-unmasked')
+    if (mark || unmasked) {
       scheduleHide()
     }
   })
+
+  // Click a highlighted mark → replace just that one occurrence, OR click ignore
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const ignoreBtn = target.closest('.pii-ignore-btn') as HTMLElement | null;
+    
+    if (ignoreBtn) {
+      const { type, original } = ignoreBtn.dataset;
+      if (type && original) {
+        ignoredTokens.add(original + ':' + type);
+        if (currentInputEl) {
+          lastProcessedText = '';
+          processInput(currentInputEl);
+        }
+        hideTooltip();
+        return;
+      }
+    }
+
+    const mark = target.closest?.('.pii-shield-mark') as HTMLElement | null
+    if (!mark && !target.closest?.('.pii-shield-badge') && !target.closest?.('.pii-shield-inspect-panel')) {
+      hideBadge()
+      hideInspectPanel()
+    }
+    if (!mark || !currentInputEl) return
+
+    if (autoReplace) return // In auto-replace mode, clicking does not replace since it's automatic.
+
+    const { type, fakeValue, original } = mark.dataset
+    if (!type || !fakeValue || !original) return
+
+    const matchIdx = currentMatches.findIndex(
+      (m) => m.text === original && m.type === (type as PIIType)
+    )
+    if (matchIdx === -1) return
+
+    const match = currentMatches[matchIdx]
+    getTokenForMatch(match) // Guarantee it's in the token map so reverse-lookup succeeds!
+
+    const text = adapter.getInputText(currentInputEl)
+    const newText = text.slice(0, match.start) + fakeValue + text.slice(match.end)
+
+    // Remove from currentMatches immediately so the block-check clears
+    currentMatches = currentMatches.filter((_, i) => i !== matchIdx)
+    setCurrentMatches(currentMatches, autoReplace)
+    syncReplacements()
+
+    hideTooltip()
+    // Let the normal input → debounce → processInput cycle re-detect remaining items
+    adapter.setInputText(currentInputEl, newText)
+  }, true)
 }
 
 try {
@@ -244,8 +375,10 @@ try {
     if (msg.action === 'SETTINGS_UPDATED') {
       const s = msg.settings as ExtensionSettings
       enabled = s.enabled
+      autoReplace = s.autoReplace || false
       enabledTypes = s.enabledTypes
       customBlockList = s.customBlockList || []
+      syncReplacements()
       if (currentInputEl) {
         lastProcessedText = ''
         processInput(currentInputEl)

@@ -39,6 +39,24 @@ export default defineConfig(({ mode }) => {
     }
   }
 
+  if (mode === 'interceptor') {
+    return {
+      build: {
+        outDir: 'dist',
+        emptyOutDir: false,
+        lib: {
+          entry: resolve(__dirname, 'src/content/fetch-interceptor.ts'),
+          name: 'PiiShieldInterceptor',
+          formats: ['iife'],
+          fileName: () => 'fetch-interceptor.js',
+        },
+      },
+      define: {
+        'process.env.NODE_ENV': JSON.stringify('production'),
+      },
+    }
+  }
+
   return {
     plugins: [react()],
     build: {
