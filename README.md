@@ -1,6 +1,6 @@
-# Fegis — PII Guard for AI Chats
+# Fegis
 
-Fegis is a Chrome extension that detects and masks personally identifiable information (PII) before you send messages to AI assistants. It highlights sensitive data in real time, replaces it with safe tokens or realistic fake values, and lets you review everything before it leaves your browser.
+Fegis is a Chrome extension that detects and masks personally identifiable information (PII). It highlights sensitive data in real time, replaces it with safe tokens or realistic fake values, and lets you review everything before it leaves your browser.
 
 Everything runs locally — no data is sent to any external server.
 
@@ -8,7 +8,7 @@ Everything runs locally — no data is sent to any external server.
 
 ## What it does
 
-- **Real-time detection** — analyzes text as you type across ChatGPT, Gemini, Claude, Copilot, Grok, and DeepSeek
+- **Real-time detection** — analyzes text as you type across ChatGPT, Gemini, Claude, Copilot, Grok, DeepSeek, and other non-agentic websites.
 - **Color-coded highlights** — visually marks names, emails, phone numbers, credit cards, SSNs, addresses, API keys, URLs, and more
 - **Two masking modes**
   - *Tokens* (default): replaces PII with `[NAME_1]`, `[EMAIL_2]`, etc.
