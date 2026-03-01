@@ -247,11 +247,11 @@ export default function HeroDemo() {
         {/* ChatGPT page */}
         <div
           className="flex flex-col items-center justify-end"
-          style={{ background: '#212121', padding: '40px 24px 24px' }}
+          style={{ background: '#212121', padding: '115px 24px 24px' }}
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
         >
-          <div style={{ marginBottom: 32, opacity: 0.7 }}>{ChatGPTLogo}</div>
+          <div style={{ marginBottom: 96, opacity: 0.7 }}>{ChatGPTLogo}</div>
 
           {/* Uploaded file badge */}
           {uploadedFileName && (
