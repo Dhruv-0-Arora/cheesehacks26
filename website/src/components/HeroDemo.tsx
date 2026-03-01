@@ -249,7 +249,7 @@ export default function HeroDemo() {
         {/* ChatGPT page */}
         <div
           className="flex flex-col items-center justify-end relative"
-          style={{ background: '#212121', padding: '115px 24px 24px' }}
+          style={{ background: '#212121', padding: '72px 24px 24px' }}
           onDragEnter={(e) => { e.preventDefault(); dragCounter.current++; setIsDragging(true) }}
           onDragLeave={(e) => { e.preventDefault(); dragCounter.current--; if (dragCounter.current === 0) setIsDragging(false) }}
           onDragOver={(e) => e.preventDefault()}
