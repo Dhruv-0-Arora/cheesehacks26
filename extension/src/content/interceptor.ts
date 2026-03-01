@@ -117,17 +117,6 @@ function unmaskResponseElement(container: HTMLElement, _tokenMap: TokenMap) {
     }
   }
 
-  // Helper: given a value (original PII text), resolve its anonymized token.
-  // Returns '[xxx_N]' format or 'unknown' if not found.
-  function resolveToken(value: string): string {
-    if (originalToToken[value]) return originalToToken[value];
-    // Fallback: scan token map values
-    for (const [tok, orig] of Object.entries(_tokenMap)) {
-      if (orig === value) return tok;
-    }
-    return 'unknown';
-  }
-
   for (const textNode of textNodes) {
     const parent = textNode.parentElement
     if (!parent) continue;
@@ -136,8 +125,6 @@ function unmaskResponseElement(container: HTMLElement, _tokenMap: TokenMap) {
     if (parent.closest('.pii-shield-unmasked') || 
         parent.closest('.pii-shield-user-msg') ||
         parent.closest('.pii-shield-highlight-layer') ||
-        parent.closest('.pii-shield-tooltip') ||
-        parent.closest('.pii-shield-badge') ||
         parent.closest('textarea') || 
         parent.closest('[contenteditable="true"]') ||
         parent.tagName === 'TEXTAREA' || 
@@ -203,30 +190,28 @@ function unmaskResponseElement(container: HTMLElement, _tokenMap: TokenMap) {
         span.className = 'pii-shield-unmasked';
         span.style.textDecoration = 'underline dashed #a3be8c';
         span.dataset.piiSentAs = matchText;
-        span.dataset.piiToken = matchText;
         span.dataset.piiOriginal = _tokenMap[matchText];
         span.dataset.piiType = tokenType;
         span.textContent = _tokenMap[matchText];
       } else if (fakeToOriginal[matchText]) {
         // matchText is a fake value → find the corresponding token
         const origVal = fakeToOriginal[matchText];
-        const token = resolveToken(origVal);
+        const token = originalToToken[origVal] || matchText;
         const piiType = fakeToType[matchText] || originalToType[origVal] || 'NAME';
         span.className = 'pii-shield-unmasked';
         span.style.textDecoration = 'underline dashed #a3be8c';
         span.dataset.piiSentAs = token;
-        span.dataset.piiToken = token;
         span.dataset.piiOriginal = origVal;
         span.dataset.piiType = piiType;
         span.textContent = origVal;
       } else {
         // matchText is an original value that appeared in the response
-        const token = resolveToken(matchText);
+        // Find which token it maps to
+        const token = originalToToken[matchText] || 'unknown';
         const piiType = originalToType[matchText] || 'NAME';
         span.className = 'pii-shield-unmasked';
         span.style.textDecoration = 'underline dashed #ebcb8b';
         span.dataset.piiSentAs = token;
-        span.dataset.piiToken = token;
         span.dataset.piiOriginal = matchText;
         span.dataset.piiType = piiType;
         span.textContent = matchText;
