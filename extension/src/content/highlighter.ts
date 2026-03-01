@@ -223,10 +223,21 @@ function positionBadge() {
   const { badgeDiv } = state
   if (badgeDiv.style.display === 'none') return
   const rect = getAnchorRect()
-  // Float badge above the visible input area's top-right corner.
-  // CSS transform: translateX(-100%) aligns its right edge with rect.right.
   badgeDiv.style.top = `${Math.max(4, rect.top - 30)}px`
   badgeDiv.style.left = `${rect.right}px`
+}
+
+function positionWarning() {
+  if (!state) return
+  const { warningDiv, inputEl } = state
+  if (warningDiv.style.display === 'none') return
+  const clip = getClipBounds(inputEl)
+  const clipW = clip.right - clip.left
+  warningDiv.style.position = 'fixed'
+  warningDiv.style.width = 'auto'
+  warningDiv.style.left = `${clip.left + clipW / 2}px`
+  warningDiv.style.transform = 'translateX(-50%)'
+  warningDiv.style.bottom = `${window.innerHeight - clip.bottom}px`
 }
 
 function startPositionLoop() {
@@ -235,6 +246,7 @@ function startPositionLoop() {
     if (!state) return
     positionHighlightLayer(state.inputEl, state.highlightDiv)
     positionBadge()
+    positionWarning()
     syncScroll()
     state.rafId = requestAnimationFrame(loop)
   }
@@ -724,12 +736,8 @@ export function showBlockWarning() {
 
   if (state.warningTimer) clearTimeout(state.warningTimer)
 
-  const rect = getAnchorRect()
-
   warningDiv.style.display = 'block'
-  warningDiv.style.position = 'fixed'
-  warningDiv.style.top = `${rect.bottom + 6}px`
-  warningDiv.style.left = `${rect.left}px`
+  positionWarning()
 
   warningDiv.style.animation = 'none'
   void warningDiv.offsetWidth
