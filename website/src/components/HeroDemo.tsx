@@ -4,11 +4,14 @@ import { tokenize, clearTokens } from '@extension/tokens/manager'
 import { generateFake } from '@extension/tokens/fake-data'
 import type { PIIMatch, PIIType } from '@extension/types'
 import * as pdfjsLib from 'pdfjs-dist'
+import mammoth from 'mammoth'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.mjs',
   import.meta.url,
 ).toString()
+
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 const DEFAULT_ENABLED_TYPES: PIIType[] = [
   'NAME', 'EMAIL', 'PHONE', 'FINANCIAL', 'SSN', 'ID', 'ADDRESS', 'SECRET', 'URL', 'DATE', 'PATH',
@@ -163,12 +166,29 @@ async function extractTextFromPDF(file: File): Promise<string> {
   return pages.join('\n\n')
 }
 
+async function extractTextFromDOCX(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer()
+  const result = await mammoth.extractRawText({ arrayBuffer: buffer })
+  return result.value
+}
+
+function extractTextFromFile(file: File): Promise<string> {
+  if (file.type === DOCX_MIME || file.name.endsWith('.docx')) {
+    return extractTextFromDOCX(file)
+  }
+  return extractTextFromPDF(file)
+}
+
+function isSupportedFile(file: File): boolean {
+  return file.type === 'application/pdf' || file.type === DOCX_MIME || file.name.endsWith('.docx')
+}
+
 export default function HeroDemo() {
   const [mode, setMode] = useState<'text' | 'file'>('text')
   const [input, setInput] = useState('')
   const [redactMode, setRedactMode] = useState<'labels' | 'replaced'>('labels')
-  const [pdfLoading, setPdfLoading] = useState(false)
-  const [pdfFileName, setPdfFileName] = useState<string | null>(null)
+  const [fileLoading, setFileLoading] = useState(false)
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
@@ -185,33 +205,33 @@ export default function HeroDemo() {
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setPdfLoading(true)
-    setPdfFileName(file.name)
+    setFileLoading(true)
+    setUploadedFileName(file.name)
     try {
-      const text = await extractTextFromPDF(file)
+      const text = await extractTextFromFile(file)
       setInput(text)
     } catch {
       setInput('')
-      setPdfFileName(null)
+      setUploadedFileName(null)
     } finally {
-      setPdfLoading(false)
+      setFileLoading(false)
     }
   }, [])
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
     const file = e.dataTransfer.files[0]
-    if (!file || file.type !== 'application/pdf') return
-    setPdfLoading(true)
-    setPdfFileName(file.name)
+    if (!file || !isSupportedFile(file)) return
+    setFileLoading(true)
+    setUploadedFileName(file.name)
     try {
-      const text = await extractTextFromPDF(file)
+      const text = await extractTextFromFile(file)
       setInput(text)
     } catch {
       setInput('')
-      setPdfFileName(null)
+      setUploadedFileName(null)
     } finally {
-      setPdfLoading(false)
+      setFileLoading(false)
     }
   }, [])
 
@@ -297,7 +317,7 @@ export default function HeroDemo() {
                 ? 'bg-[#88C0D0]/20 text-[#88C0D0]'
                 : 'text-[#4C566A] hover:text-[#D8DEE9]'
             }`}
-            onClick={() => { setMode('text'); setInput(''); setPdfFileName(null) }}
+            onClick={() => { setMode('text'); setInput(''); setUploadedFileName(null) }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -313,7 +333,7 @@ export default function HeroDemo() {
                 ? 'bg-[#88C0D0]/20 text-[#88C0D0]'
                 : 'text-[#4C566A] hover:text-[#D8DEE9]'
             }`}
-            onClick={() => { setMode('file'); setInput(''); setPdfFileName(null) }}
+            onClick={() => { setMode('file'); setInput(''); setUploadedFileName(null) }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -400,7 +420,7 @@ export default function HeroDemo() {
         /* File Upload mode */
         <div
           className={`rounded-2xl border-2 border-dashed transition-colors bg-[#2E3440]/70 backdrop-blur-md p-8 text-center ${
-            pdfLoading ? 'border-[#EBCB8B]' : pdfFileName ? 'border-[#A3BE8C]' : 'border-[#434C5E]/80 hover:border-[#88C0D0]'
+            fileLoading ? 'border-[#EBCB8B]' : uploadedFileName ? 'border-[#A3BE8C]' : 'border-[#434C5E]/80 hover:border-[#88C0D0]'
           }`}
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
@@ -408,16 +428,16 @@ export default function HeroDemo() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="application/pdf"
+            accept="application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             className="hidden"
             onChange={handleFileChange}
           />
-          {pdfLoading ? (
+          {fileLoading ? (
             <div className="space-y-3">
               <div className="w-10 h-10 mx-auto border-2 border-[#EBCB8B] border-t-transparent rounded-full animate-spin" />
-              <p className="text-sm text-[#EBCB8B] font-mono">Extracting text from PDF...</p>
+              <p className="text-sm text-[#EBCB8B] font-mono">Extracting text from file...</p>
             </div>
-          ) : pdfFileName ? (
+          ) : uploadedFileName ? (
             <div className="space-y-3">
               <div className="w-12 h-12 mx-auto rounded-xl bg-[#A3BE8C]/15 flex items-center justify-center">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A3BE8C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -426,11 +446,11 @@ export default function HeroDemo() {
                   <polyline points="9 15 11 17 15 13" />
                 </svg>
               </div>
-              <p className="text-sm text-[#A3BE8C] font-mono font-semibold">{pdfFileName}</p>
+              <p className="text-sm text-[#A3BE8C] font-mono font-semibold">{uploadedFileName}</p>
               <p className="text-xs text-[#4C566A]">{matches.length} PII item{matches.length !== 1 ? 's' : ''} detected</p>
               <button
                 className="text-xs text-[#81A1C1] hover:text-[#88C0D0] font-mono underline underline-offset-2 cursor-pointer"
-                onClick={() => { setInput(''); setPdfFileName(null); if (fileInputRef.current) fileInputRef.current.value = '' }}
+                onClick={() => { setInput(''); setUploadedFileName(null); if (fileInputRef.current) fileInputRef.current.value = '' }}
               >
                 Upload another file
               </button>
@@ -447,8 +467,8 @@ export default function HeroDemo() {
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
               </div>
-              <p className="text-sm text-[#D8DEE9] font-mono">Drop a PDF here or <span className="text-[#88C0D0] underline underline-offset-2">browse</span></p>
-              <p className="text-xs text-[#4C566A]">PDF files only</p>
+              <p className="text-sm text-[#D8DEE9] font-mono">Drop a file here or <span className="text-[#88C0D0] underline underline-offset-2">browse</span></p>
+              <p className="text-xs text-[#4C566A]">PDF and DOCX files</p>
             </div>
           )}
         </div>
