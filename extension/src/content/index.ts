@@ -4,8 +4,8 @@ import { createHighlightLayer, renderHighlights, cleanup, showTooltip, scheduleH
 import { setCurrentMatches, setFileBlocked, setupInterceptor, setupResponseUnmasking, reapplyUnmasking } from './interceptor.ts'
 import { watchForInput, stopWatching } from './observer.ts'
 import { loadTokenMap, loadReplacementMap, getFakeReplacement, saveReplacementMap, saveTokenMap, getTokenMap, getReplacementMap, getTokenForMatch, getKnownFakeValues } from '../tokens/manager.ts'
-import { setupFileHandler, updateFileHandlerSettings, type FileDetectionResult } from './file-handler.ts'
-import { showFileWarning, showScanningIndicator, hideScanningIndicator } from './file-warning.ts'
+import { setupFileHandler, updateFileHandlerSettings, whitelistFile, type FileDetectionResult } from './file-handler.ts'
+import { showFileWarning, showScanningIndicator, hideScanningIndicator, showFileCleanNotice } from './file-warning.ts'
 import type { PIIMatch, ExtensionSettings, PIIType } from '../types.ts'
 
 let enabled = true
@@ -313,9 +313,15 @@ function onInputFound(inputEl: HTMLElement) {
       setFileBlocked(true)
       showFileWarning(
         result,
-        () => { setFileBlocked(true) },
-        () => { setFileBlocked(false) }
+        () => { setFileBlocked(false) },
+        () => {
+          for (const key of result.fileKeys) whitelistFile(key)
+          setFileBlocked(false)
+        }
       )
+    },
+    (fileName: string) => {
+      showFileCleanNotice(fileName)
     },
     () => {
       activeScanCount++
