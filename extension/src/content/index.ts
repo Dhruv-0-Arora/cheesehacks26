@@ -93,14 +93,14 @@ async function processInput(el: HTMLElement) {
     return
   }
 
-  // Show regex results immediately for responsiveness
-  const rawMatches = analyzeText(text, enabledTypes, customBlockList)
+  // TEMP: regex disabled for ML-only testing
   const knownFakes = getKnownFakeValues()
-  const regexMatches = rawMatches.filter(m => !knownFakes.has(m.text))
-  currentMatches = regexMatches
-  renderHighlights(text, regexMatches)
-  setCurrentMatches(regexMatches)
-  updateInspectPanelData(text, regexMatches, getTokenMap(), getReplacementMap())
+  // const rawMatches = analyzeText(text, enabledTypes, customBlockList)
+  // const regexMatches = rawMatches.filter(m => !knownFakes.has(m.text))
+  currentMatches = []
+  renderHighlights(text, [])
+  setCurrentMatches([])
+  updateInspectPanelData(text, [], getTokenMap(), getReplacementMap())
 
   // Then augment with ML results asynchronously
   try {

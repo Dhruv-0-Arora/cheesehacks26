@@ -26,11 +26,11 @@ DATA_DIR = Path(__file__).parent / "data"
 MODEL_PATH = Path("/Volumes/wintermute/docs/fhegis/pii_ner.h5")
 
 MAX_SEQ_LEN = 128
-VOCAB_SIZE = 8000
-EMBED_DIM = 64
-LSTM_UNITS = 64
-BATCH_SIZE = 128
-EPOCHS = 8
+VOCAB_SIZE = 12000
+EMBED_DIM = 96
+LSTM_UNITS = 96
+BATCH_SIZE = 256
+EPOCHS = 15
 
 PAD_TOKEN = "<PAD>"
 UNK_TOKEN = "<UNK>"
@@ -84,16 +84,19 @@ def encode_samples(
 
 def build_model(vocab_size: int, num_labels: int) -> tf.keras.Model:
     inputs = tf.keras.layers.Input(shape=(MAX_SEQ_LEN,), dtype="int32", name="word_ids")
-    mask = tf.keras.layers.Lambda(lambda x: tf.not_equal(x, 0))(inputs)
 
     x = tf.keras.layers.Embedding(vocab_size, EMBED_DIM, mask_zero=True)(inputs)
+    x = tf.keras.layers.SpatialDropout1D(0.2)(x)
     x = tf.keras.layers.Bidirectional(
         tf.keras.layers.LSTM(LSTM_UNITS, return_sequences=True)
-    )(x, mask=mask)
+    )(x)
+    x = tf.keras.layers.Bidirectional(
+        tf.keras.layers.LSTM(LSTM_UNITS // 2, return_sequences=True)
+    )(x)
     x = tf.keras.layers.TimeDistributed(
         tf.keras.layers.Dense(LSTM_UNITS, activation="relu")
     )(x)
-    x = tf.keras.layers.Dropout(0.3)(x)
+    x = tf.keras.layers.Dropout(0.35)(x)
     outputs = tf.keras.layers.TimeDistributed(
         tf.keras.layers.Dense(num_labels, activation="softmax")
     )(x)
@@ -151,10 +154,10 @@ def main():
 
     callbacks = [
         tf.keras.callbacks.EarlyStopping(
-            monitor="val_loss", patience=2, restore_best_weights=True
+            monitor="val_loss", patience=4, restore_best_weights=True
         ),
         tf.keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss", factor=0.5, patience=1
+            monitor="val_loss", factor=0.5, patience=2
         ),
     ]
 

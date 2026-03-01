@@ -1,16 +1,21 @@
 /**
  * ML-based PII detector that runs a TF.js BiLSTM NER model.
- * Designed to run in the background service worker (CPU backend).
+ * Designed to run in the background service worker (CPU backend only).
+ *
+ * Uses only CPU-compatible TF.js modules to avoid WebGL/DOM dependencies
+ * that don't exist in service workers.
  */
 
-import * as tf from '@tensorflow/tfjs'
+import '@tensorflow/tfjs-backend-cpu'
+import * as tf from '@tensorflow/tfjs-core'
+import { loadLayersModel, LayersModel } from '@tensorflow/tfjs-layers'
 import type { PIIMatch, PIIType } from '../types.ts'
 
 const ML_SCORE = 70
 const CONFIDENCE_THRESHOLD = 0.55
 const MAX_SEQ_LEN = 128
 
-let model: tf.LayersModel | null = null
+let model: LayersModel | null = null
 let vocab: Record<string, number> | null = null
 let labels: string[] | null = null
 let loadingPromise: Promise<void> | null = null
@@ -36,22 +41,30 @@ async function loadModel(): Promise<void> {
 
   loadingPromise = (async () => {
     try {
+      console.log('[PII Shield ML] Setting CPU backend...')
+      await tf.setBackend('cpu')
       await tf.ready()
+      console.log('[PII Shield ML] TF.js ready, backend:', tf.getBackend())
 
       const baseUrl = getModelBaseUrl()
+      console.log('[PII Shield ML] Loading model from:', baseUrl)
 
       const [vocabResp, labelsResp] = await Promise.all([
         fetch(`${baseUrl}vocab.json`),
         fetch(`${baseUrl}labels.json`),
       ])
 
+      if (!vocabResp.ok) throw new Error(`vocab.json: ${vocabResp.status}`)
+      if (!labelsResp.ok) throw new Error(`labels.json: ${labelsResp.status}`)
+
       vocab = await vocabResp.json() as Record<string, number>
       labels = await labelsResp.json() as string[]
+      console.log(`[PII Shield ML] Vocab size: ${Object.keys(vocab).length}, Labels: ${labels.length}`)
 
-      model = await tf.loadLayersModel(`${baseUrl}model.json`)
+      model = await loadLayersModel(`${baseUrl}model.json`)
       console.log('[PII Shield ML] Model loaded successfully')
     } catch (err) {
-      console.warn('[PII Shield ML] Failed to load model:', err)
+      console.error('[PII Shield ML] Failed to load model:', err)
       model = null
       vocab = null
       labels = null
@@ -124,7 +137,6 @@ function decodePredictions(
     const label = labels[bestIdx]
 
     if (label.startsWith('B-') && bestProb >= CONFIDENCE_THRESHOLD) {
-      // flush previous span
       if (currentType !== null) {
         matches.push({
           text: text.substring(spanStart, spanEnd),
@@ -145,7 +157,6 @@ function decodePredictions(
       if (BIO_TO_PII_TYPE[bioType] === currentType) {
         spanEnd = wordSpans[i].end
       } else {
-        // type mismatch, flush
         matches.push({
           text: text.substring(spanStart, spanEnd),
           type: currentType,
@@ -169,7 +180,6 @@ function decodePredictions(
     }
   }
 
-  // flush trailing span
   if (currentType !== null) {
     matches.push({
       text: text.substring(spanStart, spanEnd),
@@ -187,7 +197,10 @@ export async function mlAnalyzeText(text: string): Promise<PIIMatch[]> {
   if (!text || text.trim().length === 0) return []
 
   await loadModel()
-  if (!model || !vocab || !labels) return []
+  if (!model || !vocab || !labels) {
+    console.warn('[PII Shield ML] Model not available, skipping ML analysis')
+    return []
+  }
 
   const wordSpans = tokenizeText(text)
   if (wordSpans.length === 0) return []
@@ -199,7 +212,9 @@ export async function mlAnalyzeText(text: string): Promise<PIIMatch[]> {
     const output = model.predict(inputTensor) as tf.Tensor
     const probs = await output.data() as Float32Array
     output.dispose()
-    return decodePredictions(probs, wordSpans, text)
+    const results = decodePredictions(probs, wordSpans, text)
+    console.log(`[PII Shield ML] Analyzed "${text.substring(0, 50)}..." → ${results.length} matches`, results)
+    return results
   } finally {
     inputTensor.dispose()
   }

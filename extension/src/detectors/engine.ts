@@ -121,23 +121,21 @@ function requestMLAnalysis(text: string): Promise<PIIMatch[]> {
 export async function analyzeTextWithML(
   text: string,
   enabledTypes: PIIType[] | null = null,
-  customBlockList: string[] = [],
+  _customBlockList: string[] = [],
 ): Promise<PIIMatch[]> {
-  const regexMatches = analyzeText(text, enabledTypes, customBlockList)
-
+  // TEMP: regex disabled for ML-only testing
   let mlMatches: PIIMatch[]
   try {
     mlMatches = await requestMLAnalysis(text)
   } catch {
-    return regexMatches
+    return []
   }
 
-  if (mlMatches.length === 0) return regexMatches
+  if (mlMatches.length === 0) return []
 
   if (enabledTypes) {
     mlMatches = mlMatches.filter((m) => enabledTypes.includes(m.type))
   }
 
-  const combined = [...regexMatches, ...mlMatches]
-  return resolveOverlaps(combined)
+  return resolveOverlaps(mlMatches)
 }
