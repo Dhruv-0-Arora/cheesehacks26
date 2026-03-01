@@ -86,8 +86,8 @@ export function showFileWarning(
       <div style="padding:8px 0;">${matchRows}</div>
     </div>
     <div style="display:flex;gap:8px;padding:10px 16px 14px;border-top:1px solid #3B4252;">
-      <button class="pii-file-warning-block" style="flex:1;cursor:pointer;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;font-family:inherit;border:1px solid #BF616A;background:rgba(191,97,106,0.15);color:#BF616A;transition:background 0.15s;">Block Send</button>
-      <button class="pii-file-warning-allow" style="flex:1;cursor:pointer;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;font-family:inherit;border:1px solid #434C5E;background:rgba(67,76,94,0.3);color:#D8DEE9;transition:background 0.15s;">Send Anyway</button>
+      <button class="pii-file-warning-block" style="flex:1;cursor:pointer;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;font-family:inherit;border:1px solid #BF616A;background:rgba(191,97,106,0.15);color:#BF616A;transition:background 0.15s;">Block</button>
+      <button class="pii-file-warning-allow" style="flex:1;cursor:pointer;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;font-family:inherit;border:1px solid #434C5E;background:rgba(67,76,94,0.3);color:#D8DEE9;transition:background 0.15s;">Allow &amp; Re-upload</button>
     </div>
   `
 
@@ -109,16 +109,19 @@ export function showFileWarning(
   `
 
   panel.querySelector('.pii-file-warning-close')?.addEventListener('click', () => {
+    const cb = onBlockSend
     hideFileWarning()
-    onBlockSend?.()
+    cb?.()
   })
   panel.querySelector('.pii-file-warning-block')?.addEventListener('click', () => {
+    const cb = onBlockSend
     hideFileWarning()
-    onBlockSend?.()
+    cb?.()
   })
   panel.querySelector('.pii-file-warning-allow')?.addEventListener('click', () => {
+    const cb = onAllowSend
     hideFileWarning()
-    onAllowSend?.()
+    cb?.()
   })
 
   document.body.appendChild(panel)
@@ -173,4 +176,30 @@ export function hideFileWarning() {
 
 export function isFileWarningVisible(): boolean {
   return warningPanel !== null
+}
+
+export function showFileCleanNotice(fileName: string) {
+  const notice = document.createElement('div')
+  notice.style.cssText = `
+    position: fixed;
+    z-index: 2147483647;
+    bottom: 120px;
+    right: 24px;
+    padding: 10px 18px;
+    background: #2E3440;
+    border: 1px solid #A3BE8C;
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+    font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: #A3BE8C;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: pii-panel-in 0.2s ease-out;
+  `
+  notice.textContent = `No PII in ${fileName} — re-upload to attach.`
+  document.body.appendChild(notice)
+  setTimeout(() => notice.remove(), 3000)
 }
