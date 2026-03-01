@@ -84,20 +84,14 @@ function App() {
       <header className="popup-header">
         <div className="logo-row">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <defs>
-              <linearGradient id="logoGrad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#8FBCBB" />
-                <stop offset="50%" stopColor="#88C0D0" />
-                <stop offset="100%" stopColor="#81A1C1" />
-              </linearGradient>
-            </defs>
-            <rect width="24" height="24" rx="7" fill="url(#logoGrad)" />
-            <path d="M12 6C9.79 6 8 7.79 8 10c0 1.48.81 2.77 2 3.46V15a1 1 0 001 1h2a1 1 0 001-1v-1.54c1.19-.69 2-1.98 2-3.46 0-2.21-1.79-4-4-4z" fill="#eceff4" />
-            <rect x="10" y="17" width="4" height="1.5" rx=".75" fill="rgba(236,239,244,0.7)" />
+            <path d="M12 2L4 6v5c0 5.15 3.35 9.95 8 11.3C16.65 20.95 20 16.15 20 11V6l-8-4z" fill="#88C0D0"/>
+            <path d="M10.5 11.5V10a1.5 1.5 0 0 1 3 0v1.5" stroke="#2E3440" strokeWidth="1.4" strokeLinecap="round"/>
+            <rect x="9" y="11" width="6" height="4.5" rx="1" fill="#2E3440"/>
+            <circle cx="12" cy="13.1" r="0.85" fill="#88C0D0"/>
           </svg>
           <h1>Fegis</h1>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-end' }}>
           <label className="toggle-row">
             <span>{settings.enabled ? 'Active' : 'Disabled'}</span>
             <div className={`toggle ${settings.enabled ? 'on' : ''}`} onClick={() => updateSettings({ enabled: !settings.enabled })}>
