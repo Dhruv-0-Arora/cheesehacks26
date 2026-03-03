@@ -1,5 +1,7 @@
 # Fegis
 
+[![DEMO VIDEO](https://img.youtube.com/vi/-zWZHxggq-g&t=13s/0.jpg)](https://www.youtube.com/watch?v=-zWZHxggq-g&t=13s)
+
 A Chrome extension that detects personally identifiable information (PII) in AI chatbot inputs and either blocks the message or replaces PII with tokens/fake values before it's sent. All detection runs locally in the browser.
 
 ## Supported sites
@@ -33,6 +35,14 @@ ChatGPT, Claude, Gemini, Grok, Copilot, DeepSeek, and Perplexity. A generic fall
 | Path | Unix/Windows file paths |
 | Log entries | Lines containing timestamps, IPs, and usernames |
 | Custom | User-defined terms added via the popup blocklist |
+
+## Machine Learning Model (Experimental)
+
+In addition to regex-based detectors, Fegis can optionally use a lightweight machine learning model for PII detection. This model is a BiLSTM-CRF (Bidirectional Long Short-Term Memory with Conditional Random Field) based Named Entity Recognition (NER) model, trained to identify various PII categories in text.
+
+-   **Training (`model/train.py`):** This script trains the BiLSTM NER model using TensorFlow/Keras. It processes input data to build a vocabulary and label mappings, then trains the model, and saves the trained model in Keras's `.h5` format. It also exports `vocab.json` and `labels.json` which are essential for inference.
+-   **Conversion (`model/convert.py`):** After training, the `.h5` Keras model is converted into a TensorFlow.js LayersModel format. This conversion allows the model to be run directly in the browser. The script also copies the `vocab.json` and `labels.json` files alongside the converted TF.js model artifacts into the `extension/public/model/` directory, making them accessible to the extension.
+-   **Inference (`extension/src/detectors/engine.ts`):** The `analyzeTextWithML` function in `engine.ts` integrates the ML model's predictions with the existing regex-based detection. It asynchronously requests ML analysis via the background service worker, loading the converted TensorFlow.js model from `extension/public/model/`. ML-detected PII is then merged with regex matches, with regex matches taking priority in case of overlaps. This allows for a hybrid detection approach, leveraging both rule-based and ML-based insights.
 
 ## Masking modes
 
