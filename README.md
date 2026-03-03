@@ -1,6 +1,6 @@
 # Fegis
 
-[![DEMO VIDEO](https://img.youtube.com/vi/-zWZHxggq-g&t=13s/0.jpg)](https://www.youtube.com/watch?v=-zWZHxggq-g&t=13s)
+[![DEMO VIDEO](https://img.youtube.com/vi/-zWZHxggq-g/0.jpg)](https://www.youtube.com/watch?v=-zWZHxggq-g)
 
 A Chrome extension that detects personally identifiable information (PII) in AI chatbot inputs and either blocks the message or replaces PII with tokens/fake values before it's sent. All detection runs locally in the browser.
 
